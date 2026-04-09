@@ -1,3 +1,7 @@
+pub mod dice;
+pub mod round;
+pub mod trick;
+
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "console_error_panic_hook")]

@@ -103,18 +103,21 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 
 **Run locally:** `trunk serve`
 
-### Phase 2 — Core Probability Engine (Rust)
+### Phase 2 — Core Probability Engine (Rust) ✅ *(completed 2026-04-09)*
 
-- [ ] Model the dice: define enums/structs for die types (Minotaur, Griffin, Mermaid, Number×4 colors), their faces, and bag counts (1 Minotaur, 3 Griffin, 2 Mermaid, 7 Red, 7 Yellow, 8 Purple, 8 Gray = 36 total).
-- [ ] Implement single-die probability distribution (face probabilities for each die type).
-- [ ] Implement trick-winning probability: given a set of dice in play, compute the probability that each die wins.
+- [x] Model the dice: define enums/structs for die types (Minotaur, Griffin, Mermaid, Number×4 colors), their faces, and bag counts (1 Minotaur, 3 Griffin, 2 Mermaid, 7 Red, 7 Yellow, 8 Purple, 8 Gray = 36 total).
+- [x] Implement single-die probability distribution (face probabilities for each die type).
+- [x] Implement trick-winning probability: given a set of dice in play, compute the probability that each die wins.
   - Handle special character vs. number die hierarchy.
   - Handle suit-following constraint (color matching).
   - Handle Flag (0) — always loses.
   - Handle the circular Minotaur/Griffin/Mermaid cycle.
-- [ ] Implement round-level simulation: given a player's hand (set of dice) and player count, estimate the probability distribution over number of tricks won.
-- [ ] Write unit tests for all probability calculations.
-- [ ] Benchmark hot paths to confirm real-time performance in WASM.
+- [x] Implement round-level simulation: given a player's hand (set of dice) and player count, estimate the probability distribution over number of tricks won.
+- [x] Write unit tests for all probability calculations.
+- [x] Benchmark hot paths to confirm real-time performance in WASM.
+
+**Artifacts:** `src/dice.rs`, `src/trick.rs`, `src/round.rs`
+**Test results:** 28 tests, 0 failed
 
 ### Phase 3 — WASM Bindings
 
