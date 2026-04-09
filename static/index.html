@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mino Dice Probability Calculator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 24px;
+      color: #2c3e50;
+      text-align: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      color: #555;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+    .form-row {
+      margin-bottom: 16px;
+    }
+    label.field-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 0.95rem;
+    }
+    .radio-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .radio-group input[type="radio"] { display: none; }
+    .radio-group label {
+      display: inline-block;
+      padding: 6px 14px;
+      border: 2px solid #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .radio-group input[type="radio"]:checked + label {
+      border-color: #3498db;
+      background: #3498db;
+      color: #fff;
+    }
+    .radio-group input[type="radio"]:disabled + label {
+      opacity: 0.38;
+      cursor: not-allowed;
+    }
+    .dice-select-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .dice-select-group label {
+      display: block;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      color: #555;
+    }
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      background: #fafafa;
+      cursor: pointer;
+    }
+    select:focus { outline: 2px solid #3498db; }
+    input[type="number"] {
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 180px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      background: #3498db;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 8px;
+    }
+    .btn:hover:not(:disabled) { background: #2980b9; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 3px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .btn.loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg {
+      color: #e74c3c;
+      margin-top: 8px;
+      font-size: 0.9rem;
+      min-height: 20px;
+    }
+    .chart-wrapper {
+      position: relative;
+      height: 350px;
+    }
+    .hidden { display: none; }
+    .prob-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 0.9rem;
+    }
+    .prob-table th, .prob-table td {
+      border: 1px solid #eee;
+      padding: 8px 12px;
+      text-align: center;
+    }
+    .prob-table th { background: #f5f7fa; font-weight: 600; }
+    .prob-table tr:nth-child(even) td { background: #fafbfc; }
+    footer {
+      text-align: center;
+      margin-top: 24px;
+      color: #aaa;
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🎲 Mino Dice Probability Calculator</h1>
+
+  <div class="card">
+    <h2>Game Settings</h2>
+
+    <div class="form-row">
+      <span class="field-label">Number of Players</span>
+      <div class="radio-group" id="player-group">
+        <input type="radio" name="players" id="p3" value="3" checked /><label for="p3">3</label>
+        <input type="radio" name="players" id="p4" value="4" /><label for="p4">4</label>
+        <input type="radio" name="players" id="p5" value="5" /><label for="p5">5</label>
+        <input type="radio" name="players" id="p6" value="6" /><label for="p6">6</label>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Round</span>
+      <div class="radio-group" id="round-group">
+        <input type="radio" name="round" id="r1" value="1" checked /><label for="r1">1st</label>
+        <input type="radio" name="round" id="r2" value="2" /><label for="r2">2nd</label>
+        <input type="radio" name="round" id="r3" value="3" /><label for="r3">3rd</label>
+        <input type="radio" name="round" id="r4" value="4" /><label for="r4">4th</label>
+        <input type="radio" name="round" id="r5" value="5" /><label for="r5">5th</label>
+        <input type="radio" name="round" id="r6" value="6" /><label for="r6">6th</label>
+        <input type="radio" name="round" id="r7" value="7" /><label for="r7">7th</label>
+        <input type="radio" name="round" id="r8" value="8" /><label for="r8">8th</label>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Your Turn Order</span>
+      <div class="radio-group" id="order-group"></div>
+    </div>
+
+    <div class="form-row">
+      <label class="field-label" for="num-experiments">Number of Experiments</label>
+      <input type="number" id="num-experiments" value="50000" min="100" max="500000" step="1000" />
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Your Dice</span>
+      <div class="dice-select-grid" id="dice-selects"></div>
+    </div>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <button class="btn" id="run-btn" onclick="runSimulation()">
+      <span class="spinner"></span>
+      <span class="btn-label">Run Simulation</span>
+    </button>
+  </div>
+
+  <div class="card" id="result-card">
+    <h2>Probability Simulation Results</h2>
+    <div class="chart-wrapper">
+      <canvas id="result-chart"></canvas>
+    </div>
+    <table class="prob-table" id="prob-table">
+      <thead><tr><th>Tricks Won</th><th>Probability (%)</th></tr></thead>
+      <tbody id="prob-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<footer>Mino Dice Probability Calculator &mdash; Monte Carlo simulation</footer>
+
+<script>
+const DICE_OPTIONS = [
+  { value: 'Minotaur', label: 'Minotaur Dice' },
+  { value: 'Griffin',  label: 'Griffin Dice'  },
+  { value: 'Mermaid',  label: 'Mermaid Dice'  },
+  { value: 'Red',      label: 'Red Dice'       },
+  { value: 'Yellow',   label: 'Yellow Dice'    },
+  { value: 'Purple',   label: 'Purple Dice'    },
+  { value: 'Gray',     label: 'Gray Dice'      },
+];
+
+let chartInstance = null;
+
+function getNumberPlayers() {
+  return parseInt(document.querySelector('input[name="players"]:checked').value);
+}
+
+function getRoundNumber() {
+  return parseInt(document.querySelector('input[name="round"]:checked').value);
+}
+
+function getOrder() {
+  const checked = document.querySelector('input[name="order"]:checked');
+  return checked ? parseInt(checked.value) : 0;
+}
+
+function updateOrderGroup() {
+  const n = getNumberPlayers();
+  const group = document.getElementById('order-group');
+  const prev = getOrder();
+  group.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const id = `o${i}`;
+    const inp = document.createElement('input');
+    inp.type = 'radio'; inp.name = 'order'; inp.id = id; inp.value = i;
+    if (i === Math.min(prev, n - 1)) inp.checked = true;
+    const lbl = document.createElement('label');
+    lbl.htmlFor = id; lbl.textContent = i + 1;
+    group.appendChild(inp);
+    group.appendChild(lbl);
+  }
+}
+
+function updateRoundButtons() {
+  const n = getNumberPlayers();
+  const r7 = document.getElementById('r7');
+  const r8 = document.getElementById('r8');
+
+  r8.disabled = (n >= 5);
+  r7.disabled = (n >= 6);
+
+  if (r8.disabled && document.getElementById('r8').checked) {
+    document.getElementById('r6').checked = true;
+    updateDiceSelects();
+  }
+  if (r7.disabled && document.getElementById('r7').checked) {
+    document.getElementById('r6').checked = true;
+    updateDiceSelects();
+  }
+}
+
+function updateDiceSelects() {
+  const r = getRoundNumber();
+  const grid = document.getElementById('dice-selects');
+  const current = Array.from(grid.querySelectorAll('select')).map(s => s.value);
+
+  while (grid.children.length < r) {
+    const idx = grid.children.length;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'dice-select-group';
+    const lbl = document.createElement('label');
+    lbl.textContent = `Dice ${idx + 1}`;
+    const sel = document.createElement('select');
+    sel.innerHTML = `<option value="">-- Select Dice --</option>` +
+      DICE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+    sel.value = current[idx] || '';
+    wrapper.appendChild(lbl);
+    wrapper.appendChild(sel);
+    grid.appendChild(wrapper);
+  }
+  while (grid.children.length > r) {
+    grid.removeChild(grid.lastChild);
+  }
+}
+
+document.querySelectorAll('input[name="players"]').forEach(r => {
+  r.addEventListener('change', () => {
+    updateOrderGroup();
+    updateRoundButtons();
+  });
+});
+
+document.querySelectorAll('input[name="round"]').forEach(r => {
+  r.addEventListener('change', updateDiceSelects);
+});
+
+async function runSimulation() {
+  const errorEl = document.getElementById('error-msg');
+  errorEl.textContent = '';
+
+  const numberPlayers = getNumberPlayers();
+  const roundNumber = getRoundNumber();
+  const order = getOrder();
+  const numberExperiments = parseInt(document.getElementById('num-experiments').value) || 50000;
+
+  const selects = document.querySelectorAll('#dice-selects select');
+  const ownDices = Array.from(selects).map(s => s.value);
+
+  if (ownDices.some(d => !d)) {
+    errorEl.textContent = 'All dice must be selected.';
+    return;
+  }
+
+  // Validate bag constraints
+  const defaultBag = { Minotaur: 1, Griffin: 3, Mermaid: 2, Red: 7, Yellow: 7, Purple: 8, Gray: 8 };
+  const used = {};
+  for (const d of ownDices) { used[d] = (used[d] || 0) + 1; }
+  for (const [k, v] of Object.entries(used)) {
+    if (v > defaultBag[k]) {
+      errorEl.textContent = `Cannot select more than ${defaultBag[k]} ${k} dice.`;
+      return;
+    }
+  }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.querySelector('.btn-label').textContent = 'Simulating…';
+
+  try {
+    const resp = await fetch('/api/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        number_players: numberPlayers,
+        round_number: roundNumber,
+        order,
+        own_dices: ownDices,
+        number_experiments: numberExperiments,
+      }),
+    });
+
+    if (!resp.ok) {
+      errorEl.textContent = `Server error: ${resp.status}`;
+      return;
+    }
+
+    const data = await resp.json();
+    showResults(data.labels, data.win_count_probs);
+  } catch (e) {
+    errorEl.textContent = `Request failed: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.querySelector('.btn-label').textContent = 'Run Simulation';
+  }
+}
+
+function showResults(labels, probs) {
+  const ctx = document.getElementById('result-chart').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Probability of Winning N Tricks (%)',
+        data: probs,
+        backgroundColor: 'rgba(52, 152, 219, 0.7)',
+        borderColor: 'rgba(41, 128, 185, 1)',
+        borderWidth: 1,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y.toFixed(2)}%`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          title: { display: true, text: 'Probability (%)' },
+        },
+        x: {
+          title: { display: true, text: 'Number of Tricks Won' },
+        },
+      },
+    },
+  });
+
+  const tbody = document.getElementById('prob-tbody');
+  tbody.innerHTML = labels.map((lbl, i) =>
+    `<tr><td>${lbl}</td><td>${probs[i].toFixed(2)}%</td></tr>`
+  ).join('');
+
+  document.getElementById('result-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Initialize
+updateOrderGroup();
+updateRoundButtons();
+updateDiceSelects();
+</script>
+</body>
+</html>
