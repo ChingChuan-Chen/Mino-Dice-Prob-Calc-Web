@@ -1144,8 +1144,10 @@ mod tests {
             let mut rng_a = Xorshift64::new(20260410 + player_count as u64);
             let mut rng_b = Xorshift64::new(20260420 + player_count as u64);
 
-            let dist_a = monte_carlo_trick_count_distribution(&hand, player_count, 0, 10_000, &mut rng_a);
-            let dist_b = monte_carlo_trick_count_distribution(&hand, player_count, 0, 10_000, &mut rng_b);
+            let dist_a =
+                monte_carlo_trick_count_distribution(&hand, player_count, 0, 10_000, &mut rng_a);
+            let dist_b =
+                monte_carlo_trick_count_distribution(&hand, player_count, 0, 10_000, &mut rng_b);
 
             let max_delta = dist_a
                 .iter()
