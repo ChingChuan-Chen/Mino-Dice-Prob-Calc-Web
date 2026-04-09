@@ -13,15 +13,17 @@ Mino Dice is a trick-taking game with simultaneous bidding. Players draw dice se
 
 ### Components
 
-| Die Type | Icon | Faces | Notes |
-|---|---|---|---|
-| Minotaur die | ![minotaur](assets/dice/minotaur.png) | Minotaur ×4, Flag ×2 | Special character die (dark red) |
-| Griffin die | ![griffin](assets/dice/griffin.png) | Griffin ×4, Flag ×2 | Special character die (green) |
-| Mermaid die | ![mermaid](assets/dice/mermaid.png) | Mermaid ×4, Flag ×2 | Special character die (blue) |
-| Red die | ![red](assets/dice/red_dice.png) | 7 ×2, 6 ×2, 5 ×2 | High-value number die |
-| Yellow die | ![yellow](assets/dice/yellow_dice.png) | 5 ×2, 4 ×2, 3 ×2 | Mid-value number die |
-| Purple die | ![purple](assets/dice/purple_dice.png) | 3 ×2, 2 ×2, 1 ×2 | Low-value number die |
-| Gray die | ![gray](assets/dice/gray_dice.png) | Flag ×3, 1 ×2, 7 ×1 | Mostly flags; risky suit die |
+| Die Type | Icon | Faces | Count in bag | Notes |
+|---|---|---|---|---|
+| Minotaur die | ![minotaur](assets/dice/minotaur.png) | Minotaur ×4, Flag ×2 | 1 | Special character die (dark red) |
+| Griffin die | ![griffin](assets/dice/griffin.png) | Griffin ×4, Flag ×2 | 3 | Special character die (green) |
+| Mermaid die | ![mermaid](assets/dice/mermaid.png) | Mermaid ×4, Flag ×2 | 2 | Special character die (blue) |
+| Red die | ![red](assets/dice/red_dice.png) | 7 ×2, 6 ×2, 5 ×2 | 7 | High-value number die |
+| Yellow die | ![yellow](assets/dice/yellow_dice.png) | 5 ×2, 4 ×2, 3 ×2 | 7 | Mid-value number die |
+| Purple die | ![purple](assets/dice/purple_dice.png) | 3 ×2, 2 ×2, 1 ×2 | 8 | Low-value number die |
+| Gray die | ![gray](assets/dice/gray_dice.png) | Flag ×3, 1 ×2, 7 ×1 | 8 | Mostly flags; risky suit die |
+
+**Total: 36 dice in bag** (1 + 3 + 2 + 7 + 7 + 8 + 8)
 
 ### Round Structure
 
@@ -58,6 +60,18 @@ The player with the **highest total score** after the final hand wins.
 
 ---
 
+## Tech Stack
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| Language | Rust (stable) | Core probability engine; compiled to WASM |
+| WASM toolchain | [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) + [`wasm-bindgen`](https://rustwasm.github.io/wasm-bindgen/) | Standard Rust→WASM pipeline |
+| Bundler | [Trunk](https://trunkrs.dev/) | Rust-native; no Node.js required; handles WASM loading and static asset copying |
+| CSS | [Tailwind CSS](https://tailwindcss.com/) via CDN | Utility-first; no build step; sufficient for a small single-page tool |
+| Charting | [`plotters`](https://github.com/plotters-rs/plotters) compiled to WASM/Canvas | All-Rust; no JS charting dependency; renders directly onto an HTML `<canvas>` element |
+
+---
+
 ## Development Plan
 
 ### Assets
@@ -78,13 +92,15 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 
 ### Phase 1 — Project Setup
 
-- [ ] Initialize a Rust + WebAssembly project using `wasm-pack` and a frontend bundler (e.g., Trunk or Vite + wasm-bindgen).
-- [ ] Set up `cargo fmt`, `cargo clippy`, and a lint check in CI.
-- [ ] Create a minimal "Hello World" page to verify WASM loads correctly in the browser.
+- [x] Initialize a Rust + WebAssembly project with `wasm-pack` and `wasm-bindgen`.
+- [x] Set up [Trunk](https://trunkrs.dev/) as the bundler; add `Trunk.toml` and `index.html`.
+- [x] Add Tailwind CSS CDN link to `index.html`; add a `<canvas>` element to host `plotters` output.
+- [x] Set up `cargo fmt`, `cargo clippy`, and a lint check in CI (`.github/workflows/ci.yml`).
+- [x] Create a minimal "Hello World" page to verify WASM loads correctly in the browser.
 
 ### Phase 2 — Core Probability Engine (Rust)
 
-- [ ] Model the dice: define enums/structs for die types (Minotaur, Griffin, Mermaid, Number×4 colors) and their faces.
+- [ ] Model the dice: define enums/structs for die types (Minotaur, Griffin, Mermaid, Number×4 colors), their faces, and bag counts (1 Minotaur, 3 Griffin, 2 Mermaid, 7 Red, 7 Yellow, 8 Purple, 8 Gray = 36 total).
 - [ ] Implement single-die probability distribution (face probabilities for each die type).
 - [ ] Implement trick-winning probability: given a set of dice in play, compute the probability that each die wins.
   - Handle special character vs. number die hierarchy.
@@ -104,10 +120,10 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 ### Phase 4 — Frontend UI
 
 - [ ] Design the input interface: select dice in hand (type, count), number of players, current hand number.
-- [ ] Display output: probability table / bar chart showing expected trick distribution.
+- [ ] Display output: probability table and bar chart (`plotters` on `<canvas>`) showing expected trick distribution.
 - [ ] Show bid recommendation (the bid value with highest expected score).
 - [ ] Add scoring helper: input bids and results per hand, show running totals.
-- [ ] Make UI mobile-friendly (responsive CSS).
+- [ ] Mobile-friendly design: ensure all controls and charts are fully usable on small screens (touch targets, responsive layout, no horizontal scroll).
 
 ### Phase 5 — Polish & Deployment
 
@@ -115,4 +131,12 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 - [ ] Optimize WASM binary size (`wasm-opt`, `lto`, `opt-level = "z"`).
 - [ ] Deploy as a static site (GitHub Pages or Cloudflare Pages) — no server required.
 - [ ] Write a user-facing README / how-to-use guide.
+
+### Phase 6 — In-Browser Game Simulation
+
+- [ ] Implement a full game simulation engine in Rust: set the number of players and the number of rounds, draw dice from bag, play rounds, apply scoring rules.
+- [ ] Expose simulation API via WASM: run N simulated games given a hand, return aggregated statistics.
+- [ ] Build a simulation UI page: let users set up a game state (hand, player count, round), run simulation, view outcome distribution.
+- [ ] Visualize simulated score distributions per player using `plotters`.
+- [ ] Allow step-through replay of a single simulated game (trick by trick).
 

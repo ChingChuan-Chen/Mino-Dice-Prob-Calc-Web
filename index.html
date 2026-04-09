@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mino Dice Probability Calculator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link data-trunk rel="rust" data-wasm-opt="z" />
+    <link data-trunk rel="copy-dir" href="assets" />
+  </head>
+  <body class="bg-gray-50 text-gray-900 min-h-screen">
+    <header class="bg-gray-800 text-white p-4 text-center">
+      <h1 class="text-2xl font-bold">Mino Dice Probability Calculator</h1>
+      <p class="text-sm text-gray-300 mt-1">A probability tool for Mino Dice (Mythical Dice)</p>
+    </header>
+
+    <main class="max-w-2xl mx-auto p-4">
+      <!-- Placeholder: replaced by Phase 4 UI -->
+      <div id="app" class="mt-8 text-center text-gray-500">
+        <p>Loading WASM module…</p>
+      </div>
+
+      <!-- Canvas for plotters output (Phase 4) -->
+      <canvas id="chart" class="w-full mt-6 rounded shadow hidden"></canvas>
+    </main>
+
+    <footer class="text-center text-xs text-gray-400 p-4 mt-8">
+      Frontend-only • No data leaves your device •
+      <a class="underline" href="https://boardgamegeek.com/boardgame/191071/mythical-dice" target="_blank" rel="noopener">
+        Mythical Dice on BGG
+      </a>
+    </footer>
+  </body>
+</html>
