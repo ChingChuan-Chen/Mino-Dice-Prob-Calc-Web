@@ -90,13 +90,18 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 
 > Note: a Flag face image (shared across all dice) is not yet present — consider adding `flag.png` to this folder.
 
-### Phase 1 — Project Setup
+### Phase 1 — Project Setup ✅ *(completed 2026-04-09)*
 
 - [x] Initialize a Rust + WebAssembly project with `wasm-pack` and `wasm-bindgen`.
 - [x] Set up [Trunk](https://trunkrs.dev/) as the bundler; add `Trunk.toml` and `index.html`.
 - [x] Add Tailwind CSS CDN link to `index.html`; add a `<canvas>` element to host `plotters` output.
 - [x] Set up `cargo fmt`, `cargo clippy`, and a lint check in CI (`.github/workflows/ci.yml`).
 - [x] Create a minimal "Hello World" page to verify WASM loads correctly in the browser.
+
+**Artifacts:** `src/lib.rs`, `Cargo.toml`, `Trunk.toml`, `index.html`, `.github/workflows/ci.yml`
+**Toolchain:** Rust 1.94.1 · wasm-pack 0.14.0 · Trunk 0.21.14 · wasm32-unknown-unknown target
+
+**Run locally:** `trunk serve`
 
 ### Phase 2 — Core Probability Engine (Rust)
 
