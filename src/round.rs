@@ -188,7 +188,79 @@ pub fn monte_carlo_trick_count_distribution(
         return vec![1.0];
     }
 
-    let mut counts = vec![0usize; hand_size + 1];
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let worker_count = std::thread::available_parallelism()
+            .map(|count| count.get())
+            .unwrap_or(1)
+            .min(n_samples.max(1));
+        if worker_count > 1 {
+            let chunk_size = n_samples.div_ceil(worker_count);
+            let player_hand = player_hand.to_vec();
+            let mut jobs = Vec::new();
+            let mut remaining_samples = n_samples;
+
+            while remaining_samples > 0 {
+                let current_chunk = remaining_samples.min(chunk_size);
+                remaining_samples -= current_chunk;
+                let seed_hi = rng.next_usize(u32::MAX as usize) as u64;
+                let seed_lo = rng.next_usize(u32::MAX as usize) as u64;
+                let seed = (seed_hi << 32) ^ seed_lo ^ current_chunk as u64;
+                jobs.push((current_chunk, seed));
+            }
+
+            let mut handles = Vec::with_capacity(jobs.len());
+            for (chunk_samples, seed) in jobs {
+                let hand = player_hand.clone();
+                handles.push(std::thread::spawn(move || {
+                    let mut local_rng = Xorshift64::new(seed);
+                    sample_trick_count_distribution_counts(
+                        &hand,
+                        player_count,
+                        player_position,
+                        chunk_samples,
+                        &mut local_rng,
+                    )
+                }));
+            }
+
+            let mut counts = vec![0usize; hand_size + 1];
+            for handle in handles {
+                let chunk_counts = handle.join().expect("monte carlo worker thread panicked");
+                for (index, count) in chunk_counts.into_iter().enumerate() {
+                    counts[index] += count;
+                }
+            }
+
+            return counts
+                .into_iter()
+                .map(|count| count as f64 / n_samples as f64)
+                .collect();
+        }
+    }
+
+    let counts = sample_trick_count_distribution_counts(
+        player_hand,
+        player_count,
+        player_position,
+        n_samples,
+        rng,
+    );
+
+    counts
+        .into_iter()
+        .map(|count| count as f64 / n_samples as f64)
+        .collect()
+}
+
+fn sample_trick_count_distribution_counts(
+    player_hand: &[DieType],
+    player_count: usize,
+    player_position: usize,
+    n_samples: usize,
+    rng: &mut impl Rng,
+) -> Vec<usize> {
+    let mut counts = vec![0usize; player_hand.len() + 1];
     for _ in 0..n_samples {
         let opponent_hands =
             sample_opponent_hands_from_remaining(player_hand, player_count - 1, rng);
@@ -197,11 +269,7 @@ pub fn monte_carlo_trick_count_distribution(
         let outcome = simulate_round(&hands, player_position, rng);
         counts[outcome.tricks_won[player_position]] += 1;
     }
-
     counts
-        .into_iter()
-        .map(|count| count as f64 / n_samples as f64)
-        .collect()
 }
 
 pub fn monte_carlo_special_capture_stats(
@@ -1112,6 +1180,35 @@ mod tests {
         let stats = monte_carlo_special_capture_stats(&hand, 3, 0, 200, &mut rng);
         assert!((0.0..=1.0).contains(&stats.mermaid_captures_minotaur_prob));
         assert!((0.0..=1.0).contains(&stats.minotaur_captures_griffin_prob));
+    }
+
+    #[test]
+    fn monte_carlo_distribution_is_stable_for_four_dice_across_player_counts() {
+        let hand = vec![
+            DieType::Mermaid,
+            DieType::Red,
+            DieType::Yellow,
+            DieType::Gray,
+        ];
+
+        for player_count in 3..=6 {
+            let mut rng_a = Xorshift64::new(20260410 + player_count as u64);
+            let mut rng_b = Xorshift64::new(20260420 + player_count as u64);
+
+            let dist_a = monte_carlo_trick_count_distribution(&hand, player_count, 0, 10_000, &mut rng_a);
+            let dist_b = monte_carlo_trick_count_distribution(&hand, player_count, 0, 10_000, &mut rng_b);
+
+            let max_delta = dist_a
+                .iter()
+                .zip(&dist_b)
+                .map(|(left, right)| (left - right).abs())
+                .fold(0.0_f64, f64::max);
+
+            assert!(
+                max_delta < 0.03,
+                "player_count={player_count}, dist_a={dist_a:?}, dist_b={dist_b:?}, max_delta={max_delta}"
+            );
+        }
     }
 
     #[test]
