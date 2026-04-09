@@ -1,7 +1,9 @@
 pub mod api;
+pub mod chart;
 pub mod dice;
 pub mod round;
 pub mod trick;
+pub mod ui;
 
 use wasm_bindgen::prelude::*;
 
@@ -15,9 +17,13 @@ pub fn main() {
     console_error_panic_hook::set_once();
 
     web_sys::console::log_1(&"Mino Dice Probability Calculator loaded!".into());
+
+    if let Err(e) = ui::init_ui() {
+        web_sys::console::error_1(&e);
+    }
 }
 
-/// Placeholder: returns the app version string.
+/// Returns the app version string.
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()

@@ -1,30 +1,11 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use crate::dice::{face_distribution, DieType};
+use crate::dice::{DieType, face_distribution};
 use crate::round::{
-    expected_score_for_bid, expected_tricks, optimal_bid, round_count, simulate_games,
-    trick_count_distribution, Xorshift64,
+    Xorshift64, expected_score_for_bid, expected_tricks, optimal_bid, round_count, simulate_games,
+    simulate_round_number, top_opponent_hand_patterns, trick_count_distribution,
 };
-
-// ── Input / output types ──────────────────────────────────────────────────────
-// All types derive Serialize + Deserialize so they can cross the WASM boundary
-// with serde-wasm-bindgen (JsValue → Rust and back).
-
-/// A die type string understood by the API.
-/// Accepted values: "minotaur", "griffin", "mermaid", "red", "yellow", "purple", "gray"
-fn parse_die_type(s: &str) -> Result<DieType, JsValue> {
-    match s.to_ascii_lowercase().as_str() {
-        "minotaur" => Ok(DieType::Minotaur),
-        "griffin" => Ok(DieType::Griffin),
-        "mermaid" => Ok(DieType::Mermaid),
-        "red" => Ok(DieType::Red),
-        "yellow" => Ok(DieType::Yellow),
-        "purple" => Ok(DieType::Purple),
-        "gray" => Ok(DieType::Gray),
-        other => Err(JsValue::from_str(&format!("Unknown die type: {other}"))),
-    }
-}
 
 fn die_type_to_str(dt: DieType) -> &'static str {
     match dt {
@@ -91,6 +72,7 @@ pub struct SimInput {
     pub player_count: usize,
     pub n_games: usize,
     pub seed: u64,
+    pub round_number: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -99,6 +81,18 @@ pub struct SimOutput {
     pub scores: Vec<Vec<i64>>,
     /// Per-player mean score across all simulated games.
     pub mean_scores: Vec<f64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OpponentPatternsInput {
+    pub hand: Vec<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OpponentPatternDto {
+    pub hand: Vec<String>,
+    pub probability: f64,
 }
 
 // ── WASM-exported functions ───────────────────────────────────────────────────
@@ -170,6 +164,14 @@ pub fn get_round_count(player_count: usize) -> Result<usize, JsValue> {
     Ok(round_count(player_count))
 }
 
+/// Returns the most likely opponent-hand patterns for the current player hand.
+#[wasm_bindgen]
+pub fn get_top_opponent_patterns(input: JsValue) -> Result<JsValue, JsValue> {
+    let input: OpponentPatternsInput = serde_wasm_bindgen::from_value(input)?;
+    let output = inner_top_opponent_patterns(input).map_err(|e| JsValue::from_str(&e))?;
+    Ok(serde_wasm_bindgen::to_value(&output)?)
+}
+
 // ── Pure (non-wasm) inner helpers used by tests ───────────────────────────────
 
 fn parse_die_type_str(s: &str) -> Result<DieType, String> {
@@ -188,11 +190,8 @@ fn parse_die_type_str(s: &str) -> Result<DieType, String> {
 // ── Pure (non-wasm) inner helpers used by tests ───────────────────────────────
 
 fn inner_trick_distribution(input: TrickDistInput) -> Result<TrickDistOutput, String> {
-    let hand: Result<Vec<DieType>, String> = input
-        .hand
-        .iter()
-        .map(|s| parse_die_type_str(s))
-        .collect();
+    let hand: Result<Vec<DieType>, String> =
+        input.hand.iter().map(|s| parse_die_type_str(s)).collect();
     let hand = hand?;
 
     let opp_hands: Result<Vec<Vec<DieType>>, String> = input
@@ -249,8 +248,17 @@ fn inner_simulation(input: SimInput) -> Result<SimOutput, String> {
     if input.n_games == 0 {
         return Err("n_games must be > 0".to_string());
     }
+    if let Some(round_number) = input.round_number
+        && (round_number == 0 || round_number > round_count(input.player_count))
+    {
+        return Err("round_number out of range for player_count".to_string());
+    }
     let mut rng = Xorshift64::new(input.seed);
-    let scores = simulate_games(input.player_count, input.n_games, &mut rng);
+    let scores = if let Some(round_number) = input.round_number {
+        simulate_round_number(input.player_count, round_number, input.n_games, &mut rng)
+    } else {
+        simulate_games(input.player_count, input.n_games, &mut rng)
+    };
     let mean_scores: Vec<f64> = scores
         .iter()
         .map(|s| s.iter().sum::<i64>() as f64 / s.len() as f64)
@@ -259,6 +267,27 @@ fn inner_simulation(input: SimInput) -> Result<SimOutput, String> {
         scores,
         mean_scores,
     })
+}
+
+fn inner_top_opponent_patterns(
+    input: OpponentPatternsInput,
+) -> Result<Vec<OpponentPatternDto>, String> {
+    let hand: Result<Vec<DieType>, String> =
+        input.hand.iter().map(|s| parse_die_type_str(s)).collect();
+    let hand = hand?;
+    let limit = input.limit.unwrap_or(3).clamp(1, 10);
+    let patterns = top_opponent_hand_patterns(&hand, hand.len(), limit);
+    Ok(patterns
+        .into_iter()
+        .map(|pattern| OpponentPatternDto {
+            hand: pattern
+                .hand
+                .into_iter()
+                .map(|dt| die_type_to_str(dt).to_string())
+                .collect(),
+            probability: pattern.probability,
+        })
+        .collect())
 }
 
 // ── Integration tests ─────────────────────────────────────────────────────────
@@ -364,6 +393,7 @@ mod tests {
             player_count: 4,
             n_games: 20,
             seed: 42,
+            round_number: Some(3),
         })
         .unwrap();
         assert_eq!(output.scores.len(), 4);
@@ -374,14 +404,71 @@ mod tests {
     }
 
     #[test]
+    fn top_opponent_patterns_returns_limit() {
+        let output = inner_top_opponent_patterns(OpponentPatternsInput {
+            hand: vec!["red".into(), "yellow".into()],
+            limit: Some(3),
+        })
+        .unwrap();
+        assert_eq!(output.len(), 3);
+        assert!(output[0].probability >= output[1].probability);
+    }
+
+    #[test]
     fn simulation_invalid_player_count_errors() {
-        assert!(inner_simulation(SimInput { player_count: 2, n_games: 1, seed: 0 }).is_err());
-        assert!(inner_simulation(SimInput { player_count: 7, n_games: 1, seed: 0 }).is_err());
+        assert!(
+            inner_simulation(SimInput {
+                player_count: 2,
+                n_games: 1,
+                seed: 0,
+                round_number: None,
+            })
+            .is_err()
+        );
+        assert!(
+            inner_simulation(SimInput {
+                player_count: 7,
+                n_games: 1,
+                seed: 0,
+                round_number: None,
+            })
+            .is_err()
+        );
     }
 
     #[test]
     fn simulation_zero_games_errors() {
-        assert!(inner_simulation(SimInput { player_count: 4, n_games: 0, seed: 0 }).is_err());
+        assert!(
+            inner_simulation(SimInput {
+                player_count: 4,
+                n_games: 0,
+                seed: 0,
+                round_number: None,
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn simulation_invalid_round_errors() {
+        assert!(
+            inner_simulation(SimInput {
+                player_count: 4,
+                n_games: 10,
+                seed: 0,
+                round_number: Some(0),
+            })
+            .is_err()
+        );
+        assert!(
+            inner_simulation(SimInput {
+                player_count: 6,
+                n_games: 10,
+                seed: 0,
+                round_number: Some(7),
+            })
+            .is_err()
+        );
     }
 
     // --- round count ---

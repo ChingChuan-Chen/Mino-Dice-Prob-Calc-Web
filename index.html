@@ -1,35 +1,216 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mino Dice Probability Calculator</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link data-trunk rel="rust" data-wasm-opt="z" />
-    <link data-trunk rel="copy-dir" href="assets" />
-  </head>
-  <body class="bg-gray-50 text-gray-900 min-h-screen">
-    <header class="bg-gray-800 text-white p-4 text-center">
-      <h1 class="text-2xl font-bold">Mino Dice Probability Calculator</h1>
-      <p class="text-sm text-gray-300 mt-1">A probability tool for Mino Dice (Mythical Dice)</p>
-    </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mino Dice – Probability Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link data-trunk rel="rust" data-wasm-opt="z" />
+  <link data-trunk rel="copy-dir" href="assets" />
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  <div class="hidden" aria-hidden="true">
+    <input type="hidden" id="current-player-count" value="4" />
+    <input type="hidden" id="current-play-order" value="0" />
+    <input type="hidden" id="current-hand-size" value="0" />
+    <input type="hidden" id="last-dist" value="" />
+    <input type="hidden" id="last-optimal-bid" value="0" />
+  </div>
 
-    <main class="max-w-2xl mx-auto p-4">
-      <!-- Placeholder: replaced by Phase 4 UI -->
-      <div id="app" class="mt-8 text-center text-gray-500">
-        <p>Loading WASM module…</p>
-      </div>
+  <header class="bg-slate-800 border-b border-slate-700 py-4 px-6 shadow-md">
+    <h1 class="text-2xl font-bold">
+      <span class="text-amber-400">Mino Dice</span>
+      <span class="text-slate-300 font-normal text-lg ml-2">Probability Calculator</span>
+    </h1>
+    <p class="text-xs text-slate-500 mt-0.5">
+      Based on <em>Mythical Dice</em> (BGG #191071) · Frontend-only · No data leaves your device
+    </p>
+  </header>
 
-      <!-- Canvas for plotters output (Phase 4) -->
-      <canvas id="chart" class="w-full mt-6 rounded shadow hidden"></canvas>
-    </main>
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-5">
+    <nav class="flex flex-wrap gap-2">
+      <button id="tab-btn-calculator" class="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 text-slate-950">Calculator</button>
+    </nav>
 
-    <footer class="text-center text-xs text-gray-400 p-4 mt-8">
-      Frontend-only • No data leaves your device •
-      <a class="underline" href="https://boardgamegeek.com/boardgame/191071/mythical-dice" target="_blank" rel="noopener">
-        Mythical Dice on BGG
-      </a>
-    </footer>
-  </body>
+    <section id="tab-panel-calculator" class="space-y-5">
+      <section class="bg-slate-800 rounded-2xl p-5 shadow">
+        <h2 class="text-base font-semibold mb-4 text-slate-200">Hand Setup</h2>
+
+        <div class="mb-5">
+          <p class="text-xs text-slate-400 uppercase tracking-wide mb-2">Number of players</p>
+          <div class="flex gap-2">
+            <button id="pc-btn-3" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">3</button>
+            <button id="pc-btn-4" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white">4</button>
+            <button id="pc-btn-5" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">5</button>
+            <button id="pc-btn-6" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">6</button>
+          </div>
+        </div>
+
+        <div class="mb-5">
+          <p class="text-xs text-slate-400 uppercase tracking-wide mb-2">Your play order on the next trick</p>
+          <div class="flex flex-wrap gap-2">
+            <button id="po-btn-0" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white">1st</button>
+            <button id="po-btn-1" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">2nd</button>
+            <button id="po-btn-2" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">3rd</button>
+            <button id="po-btn-3" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">4th</button>
+            <button id="po-btn-4" class="hidden px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">5th</button>
+            <button id="po-btn-5" class="hidden px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">6th</button>
+          </div>
+          <div class="mt-1 text-xs text-slate-500">1st means you lead now; later positions mean that many players act before you.</div>
+        </div>
+
+        <div class="mb-5">
+          <p class="text-xs text-slate-400 uppercase tracking-wide mb-2">Your hand</p>
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/minotaur_die.svg" class="w-9 h-9 object-contain" alt="Minotaur" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Minotaur</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-minotaur" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-minotaur" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-minotaur" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 1</span>
+            </div>
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/griffin_die.svg" class="w-9 h-9 object-contain" alt="Griffin" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Griffin</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-griffin" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-griffin" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-griffin" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 3</span>
+            </div>
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/mermaid_die.svg" class="w-9 h-9 object-contain" alt="Mermaid" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Mermaid</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-mermaid" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-mermaid" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-mermaid" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 2</span>
+            </div>
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/red_die.svg" class="w-9 h-9 object-contain" alt="Red" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Red</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-red" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-red" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-red" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 7</span>
+            </div>
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/yellow_die.svg" class="w-9 h-9 object-contain" alt="Yellow" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Yellow</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-yellow" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-yellow" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-yellow" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 7</span>
+            </div>
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/purple_die.svg" class="w-9 h-9 object-contain" alt="Purple" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Purple</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-purple" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-purple" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-purple" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 8</span>
+            </div>
+            <div class="bg-slate-700/60 rounded-xl p-2 flex flex-col items-center gap-1">
+              <img src="assets/dice/gray_die.svg" class="w-9 h-9 object-contain" alt="Gray" loading="lazy" />
+              <span class="text-[10px] text-slate-400">Gray</span>
+              <div class="flex items-center gap-1">
+                <button id="die-dec-gray" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">-</button>
+                <span id="die-count-gray" class="w-4 text-center text-sm font-bold">0</span>
+                <button id="die-inc-gray" class="w-6 h-6 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-base select-none">+</button>
+              </div>
+              <span class="text-[9px] text-slate-500">max 8</span>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mt-2">Hand size: <span id="hand-size-display" class="font-semibold text-slate-300">0 / 8</span></p>
+        </div>
+
+        <label class="block text-sm text-slate-300 mb-5">Monte Carlo Replications
+          <input id="calc-replications-input" type="number" min="1000" step="1000" value="10000" class="mt-2 w-full bg-slate-700 rounded-lg px-3 py-2 text-center" />
+          <div class="mt-1 text-xs text-slate-500">Used for the probability estimate of your current hand.</div>
+        </label>
+
+        <label class="block text-sm text-slate-300 mb-5">Monte Carlo Seed
+          <input id="calc-seed-input" type="number" min="1" placeholder="blank = random each click" class="mt-2 w-full bg-slate-700 rounded-lg px-3 py-2 text-center" />
+          <div class="mt-1 text-xs text-slate-500">Only used when hand size is greater than 1.</div>
+        </label>
+
+        <button id="calc-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl font-semibold transition-colors">
+          Calculate Distribution
+        </button>
+      </section>
+
+      <section id="results-section" class="hidden bg-slate-800 rounded-2xl p-5 shadow">
+        <h2 class="text-base font-semibold mb-4 text-slate-200">Results</h2>
+        <div class="bg-amber-950/60 border border-amber-700 rounded-xl p-5 mb-4">
+          <div class="flex flex-col items-center text-center gap-2">
+            <p class="text-lg sm:text-xl font-bold text-amber-300 uppercase tracking-[0.18em]">Optimal Bid</p>
+            <p id="bid-value" class="text-7xl sm:text-8xl font-black text-amber-200 leading-none">-</p>
+          </div>
+          <p id="bid-details" class="text-sm text-slate-400"></p>
+        </div>
+
+        <div id="chart-wrap" class="relative mb-4">
+          <canvas id="chart" width="560" height="260" class="w-full rounded-lg bg-slate-950 border border-slate-700"></canvas>
+          <div id="chart-tooltip"
+            class="hidden absolute z-10 rounded-lg bg-slate-950/95 border border-slate-700 px-3 py-2 text-xs text-slate-100 shadow-xl pointer-events-none whitespace-nowrap">
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-xs text-slate-400 uppercase tracking-wide border-b border-slate-700">
+                <th class="text-left py-2 pl-3">Tricks</th>
+                <th class="text-center py-2">Probability</th>
+                <th class="text-right py-2 pr-3">Exp. score at bid</th>
+              </tr>
+            </thead>
+            <tbody id="dist-tbody"></tbody>
+          </table>
+        </div>
+
+        <div id="special-capture-section" class="hidden mt-5 border-t border-slate-700 pt-5">
+          <div class="mb-3">
+            <h3 class="text-sm font-semibold text-slate-200">Special Capture Odds</h3>
+            <p class="text-xs text-slate-500 mt-1">Estimated round-level chances to earn special-die capture bonuses with your current hand.</p>
+          </div>
+          <ul id="special-capture-list" class="space-y-2"></ul>
+        </div>
+
+        <div class="mt-5 border-t border-slate-700 pt-5">
+          <div class="flex items-center justify-between gap-4 mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-200">Top 3 Likely Opponent Hands</h3>
+              <p class="text-xs text-slate-500 mt-1">Computed exactly from the remaining bag after removing your current hand.</p>
+            </div>
+          </div>
+          <ul id="top-opponent-patterns" class="space-y-2">
+            <li class="text-slate-500">Calculate a hand to inspect opponent patterns.</li>
+          </ul>
+        </div>
+      </section>
+    </section>
+
+
+  </main>
+
+  <footer class="text-center text-xs text-slate-600 py-6">
+    Frontend-only · No data leaves your device ·
+    <a class="underline hover:text-slate-400" href="https://boardgamegeek.com/boardgame/191071/mythical-dice" target="_blank" rel="noopener noreferrer">
+      Mythical Dice on BGG
+    </a>
+  </footer>
+</body>
 </html>

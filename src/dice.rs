@@ -127,7 +127,10 @@ impl DieType {
 
     /// Returns true if this die type is a special-character die.
     pub fn is_special_die(self) -> bool {
-        matches!(self, DieType::Minotaur | DieType::Griffin | DieType::Mermaid)
+        matches!(
+            self,
+            DieType::Minotaur | DieType::Griffin | DieType::Mermaid
+        )
     }
 
     /// All die types in the bag.
@@ -229,11 +232,7 @@ mod tests {
     #[test]
     fn gray_die_half_flags() {
         let dist = face_distribution(DieType::Gray);
-        let p = dist
-            .iter()
-            .find(|fp| fp.face == Face::Flag)
-            .unwrap()
-            .prob;
+        let p = dist.iter().find(|fp| fp.face == Face::Flag).unwrap().prob;
         assert!((p - 3.0 / 6.0).abs() < 1e-10);
     }
 

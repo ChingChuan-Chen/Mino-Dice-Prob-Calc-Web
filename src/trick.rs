@@ -6,12 +6,12 @@ use crate::dice::{DieType, Face};
 /// Returns true if `attacker` beats `defender` in the special-character cycle.
 /// Both must be special faces; panics in debug if called with non-specials.
 fn special_beats(attacker: Face, defender: Face) -> bool {
-    match (attacker, defender) {
-        (Face::Minotaur, Face::Griffin) => true,
-        (Face::Griffin, Face::Mermaid) => true,
-        (Face::Mermaid, Face::Minotaur) => true,
-        _ => false,
-    }
+    matches!(
+        (attacker, defender),
+        (Face::Minotaur, Face::Griffin)
+            | (Face::Griffin, Face::Mermaid)
+            | (Face::Mermaid, Face::Minotaur)
+    )
 }
 
 // ── Trick context ─────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ impl RolledDie {
 /// 1. Special characters beat all numbers.
 /// 2. Among specials: Minotaur > Griffin, Griffin > Mermaid, Mermaid > Minotaur.
 ///    If two identical specials clash, the later roller wins.
-/// 3. Flags (0) can never win.
+/// 3. Flags (0) lose to any non-flag face. If every roll is a flag, the later roller wins.
 /// 4. Among numbers only: highest wins; ties go to the later roller.
 pub fn trick_winner(rolls: &[RolledDie]) -> usize {
     assert!(!rolls.is_empty(), "trick must have at least one roll");
@@ -62,9 +62,11 @@ pub fn trick_winner(rolls: &[RolledDie]) -> usize {
 /// Returns true if `challenger` beats `current` holder.
 fn beats_current(challenger: &RolledDie, current: &RolledDie) -> bool {
     match (challenger.face, current.face) {
-        // Flag can never win.
+        // If everyone rolled Flag, the later roller wins the tie.
+        (Face::Flag, Face::Flag) => challenger.roll_order > current.roll_order,
+        // A flag loses to any non-flag face.
         (Face::Flag, _) => false,
-        // Anything beats a flag (or 0 holder).
+        // Any non-flag face beats a flag.
         (_, Face::Flag) => true,
         // Both specials: check cycle, tie → later roller wins.
         (c, h) if c.is_special() && h.is_special() => {
@@ -174,10 +176,7 @@ fn face_sort_key(f: Face) -> u16 {
 }
 
 /// Iterates over all combinations of indices, calling `callback` with each combo.
-fn enumerate_combinations(
-    player_faces: &[Vec<(Face, f64)>],
-    callback: &mut impl FnMut(&[usize]),
-) {
+fn enumerate_combinations(player_faces: &[Vec<(Face, f64)>], callback: &mut impl FnMut(&[usize])) {
     let n = player_faces.len();
     let counts: Vec<usize> = player_faces.iter().map(|v| v.len()).collect();
     let mut indices = vec![0usize; n];
@@ -297,13 +296,20 @@ mod tests {
 
     #[test]
     fn all_flags_later_roller_wins() {
-        // Both roll Flag — Flag can't win, so the tie-break never fires positively.
-        // Actually with our logic: flag vs flag, first check challenger.face == Flag → false.
-        // So rolls[0] stays as best. Winner = 0.
         let rolls = vec![
             RolledDie::new(DieType::Gray, Face::Flag, 0),
             RolledDie::new(DieType::Gray, Face::Flag, 1),
         ];
-        assert_eq!(trick_winner(&rolls), 0);
+        assert_eq!(trick_winner(&rolls), 1);
+    }
+
+    #[test]
+    fn all_flags_last_of_three_wins() {
+        let rolls = vec![
+            RolledDie::new(DieType::Gray, Face::Flag, 0),
+            RolledDie::new(DieType::Gray, Face::Flag, 1),
+            RolledDie::new(DieType::Gray, Face::Flag, 2),
+        ];
+        assert_eq!(trick_winner(&rolls), 2);
     }
 }
