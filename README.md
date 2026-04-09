@@ -18,10 +18,10 @@ Mino Dice is a trick-taking game with simultaneous bidding. Players draw dice se
 | Minotaur die | ![minotaur](assets/dice/minotaur_die.svg) | Minotaur ×4, Flag ×2 | 1 | Special character die (dark red) |
 | Griffin die | ![griffin](assets/dice/griffin_die.svg) | Griffin ×4, Flag ×2 | 3 | Special character die (green) |
 | Mermaid die | ![mermaid](assets/dice/mermaid_die.svg) | Mermaid ×4, Flag ×2 | 2 | Special character die (blue) |
-| Red die | ![red](assets/dice/red_dice.png) | 7 ×2, 6 ×2, 5 ×2 | 7 | High-value number die |
-| Yellow die | ![yellow](assets/dice/yellow_dice.png) | 5 ×2, 4 ×2, 3 ×2 | 7 | Mid-value number die |
-| Purple die | ![purple](assets/dice/purple_dice.png) | 3 ×2, 2 ×2, 1 ×2 | 8 | Low-value number die |
-| Gray die | ![gray](assets/dice/gray_dice.png) | Flag ×3, 1 ×2, 7 ×1 | 8 | Mostly flags; risky suit die |
+| Red die | ![red](assets/dice/red_die.svg) | 7 ×2, 6 ×2, 5 ×2 | 7 | High-value number die |
+| Yellow die | ![yellow](assets/dice/yellow_die.svg) | 5 ×2, 4 ×2, 3 ×2 | 7 | Mid-value number die |
+| Purple die | ![purple](assets/dice/purple_die.svg) | 3 ×2, 2 ×2, 1 ×2 | 8 | Low-value number die |
+| Gray die | ![gray](assets/dice/gray_die.svg) | Flag ×3, 1 ×2, 7 ×1 | 8 | Mostly flags; risky suit die |
 
 **Total: 36 dice in bag** (1 + 3 + 2 + 7 + 7 + 8 + 8)
 
@@ -83,10 +83,10 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 | `minotaur_die.svg` | Minotaur face (used on Minotaur die ×4) |
 | `griffin_die.svg` | Griffin face (used on Griffin die ×4) |
 | `mermaid_die.svg` | Mermaid face (used on Mermaid die ×4) |
-| `red_dice.png` | Red number die icon |
-| `yellow_dice.png` | Yellow number die icon |
-| `purple_dice.png` | Purple number die icon |
-| `gray_dice.png` | Gray die/Flag face icon |
+| `red_die.svg` | Red number die icon |
+| `yellow_die.svg` | Yellow number die icon |
+| `purple_die.svg` | Purple number die icon |
+| `gray_die.svg` | Gray die/Flag face icon |
 
 ### Phase 1 — Project Setup ✅ *(completed 2026-04-09)*
 
