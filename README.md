@@ -80,8 +80,8 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 
 | File | Represents |
 |---|---|
-| `minotaur.png` | Minotaur face (used on Minotaur die ×4) |
-| `griffin.png` | Griffin face (used on Griffin die ×4) |
+| `minotaur_die.svg` | Minotaur face (used on Minotaur die ×4) |
+| `griffin_die.svg` | Griffin face (used on Griffin die ×4) |
 | `mermaid.png` | Mermaid face (used on Mermaid die ×4) |
 | `red_dice.png` | Red number die icon |
 | `yellow_dice.png` | Yellow number die icon |
@@ -119,11 +119,24 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 **Artifacts:** `src/dice.rs`, `src/trick.rs`, `src/round.rs`
 **Test results:** 28 tests, 0 failed
 
-### Phase 3 — WASM Bindings
+### Phase 3 — WASM Bindings ✅ *(completed 2026-04-09)*
 
-- [ ] Expose probability engine functions to JavaScript via `wasm-bindgen`.
-- [ ] Define clean public API types (serializable input/output structs).
-- [ ] Add integration tests that call bindings end-to-end.
+- [x] Expose probability engine functions to JavaScript via `wasm-bindgen`.
+- [x] Define clean public API types (serializable input/output structs).
+- [x] Add integration tests that call bindings end-to-end.
+
+**Artifacts:** `src/api.rs`
+**Exported functions:**
+
+| Function | Input | Output |
+|---|---|---|
+| `get_all_dice_info()` | — | Array of die metadata (type, bag count, face probabilities) |
+| `get_trick_distribution(input)` | `TrickDistInput` | `TrickDistOutput` (distribution, expected tricks, optimal bid, expected scores) |
+| `get_win_probability(input)` | `WinProbInput` | `WinProbOutput` (win probability for one player) |
+| `run_simulation(input)` | `SimInput` | `SimOutput` (per-player score arrays + means) |
+| `get_round_count(player_count)` | `number` | `number` |
+
+**Test results:** 40 tests, 0 failed
 
 ### Phase 4 — Frontend UI
 

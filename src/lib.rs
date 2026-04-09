@@ -1,3 +1,4 @@
+pub mod api;
 pub mod dice;
 pub mod round;
 pub mod trick;
