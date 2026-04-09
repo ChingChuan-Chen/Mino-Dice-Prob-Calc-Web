@@ -423,7 +423,7 @@ fn do_calculate(doc: &Document) -> Result<(), JsValue> {
     let player_count = (get_hidden_i32(doc, "current-player-count") as usize).clamp(3, 6);
     let player_position =
         (get_hidden_i32(doc, "current-play-order") as usize).min(player_count - 1);
-    let replications = get_input_usize(doc, "calc-replications-input").max(100000);
+    let replications = get_input_usize(doc, "calc-replications-input").max(1000);
     let hand_size = hand.len();
     let dist = if hand_size == 1 {
         exact_single_trick_distribution(hand[0], player_count, player_position)

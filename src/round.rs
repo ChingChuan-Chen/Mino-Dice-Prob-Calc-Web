@@ -188,57 +188,6 @@ pub fn monte_carlo_trick_count_distribution(
         return vec![1.0];
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let worker_count = std::thread::available_parallelism()
-            .map(|count| count.get())
-            .unwrap_or(1)
-            .min(n_samples.max(1));
-        if worker_count > 1 {
-            let chunk_size = n_samples.div_ceil(worker_count);
-            let player_hand = player_hand.to_vec();
-            let mut jobs = Vec::new();
-            let mut remaining_samples = n_samples;
-
-            while remaining_samples > 0 {
-                let current_chunk = remaining_samples.min(chunk_size);
-                remaining_samples -= current_chunk;
-                let seed_hi = rng.next_usize(u32::MAX as usize) as u64;
-                let seed_lo = rng.next_usize(u32::MAX as usize) as u64;
-                let seed = (seed_hi << 32) ^ seed_lo ^ current_chunk as u64;
-                jobs.push((current_chunk, seed));
-            }
-
-            let mut handles = Vec::with_capacity(jobs.len());
-            for (chunk_samples, seed) in jobs {
-                let hand = player_hand.clone();
-                handles.push(std::thread::spawn(move || {
-                    let mut local_rng = Xorshift64::new(seed);
-                    sample_trick_count_distribution_counts(
-                        &hand,
-                        player_count,
-                        player_position,
-                        chunk_samples,
-                        &mut local_rng,
-                    )
-                }));
-            }
-
-            let mut counts = vec![0usize; hand_size + 1];
-            for handle in handles {
-                let chunk_counts = handle.join().expect("monte carlo worker thread panicked");
-                for (index, count) in chunk_counts.into_iter().enumerate() {
-                    counts[index] += count;
-                }
-            }
-
-            return counts
-                .into_iter()
-                .map(|count| count as f64 / n_samples as f64)
-                .collect();
-        }
-    }
-
     let counts = sample_trick_count_distribution_counts(
         player_hand,
         player_count,
