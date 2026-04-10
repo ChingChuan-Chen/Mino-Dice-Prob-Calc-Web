@@ -210,7 +210,7 @@ struct OpponentDrawState<'a> {
     draw_prob: f64,
 }
 
-/// Estimates P(tricks = k) for a specific player hand by Monte Carlo simulation.
+/// Estimates P(tricks = k) for a specific player hand using a bag-aware seat DP.
 pub fn analytical_trick_count_distribution(
     player_hand: &[DieType],
     player_count: usize,
@@ -226,28 +226,49 @@ pub fn analytical_trick_count_distribution(
     if hand_size == 0 {
         return vec![1.0];
     }
+    if hand_size == 1 {
+        return exact_single_trick_distribution(player_hand[0], player_count, player_position);
+    }
 
-    // Seat-aware DP: dp[k][s] = probability of having won k tricks and being
-    // in seat s at the start of the next trick.
-    let mut dp = vec![vec![0.0f64; player_count]; hand_size + 1];
-    dp[0][player_position] = 1.0;
+    let initial_remaining = remaining_counts_after_removing_hand(player_hand)
+        .into_iter()
+        .map(|count| count as f64)
+        .collect::<Vec<_>>();
+
+    // Bag-aware seat DP:
+    // - dp_prob[k][s]: probability mass of (wins=k, seat=s)
+    // - dp_remaining_sum[k][s][t]: probability-weighted expected remaining
+    //   count of die type `t` for that state.
+    let mut dp_prob = vec![vec![0.0f64; player_count]; hand_size + 1];
+    let mut dp_remaining_sum =
+        vec![vec![vec![0.0f64; DieType::ALL.len()]; player_count]; hand_size + 1];
+    dp_prob[0][player_position] = 1.0;
+    dp_remaining_sum[0][player_position].copy_from_slice(&initial_remaining);
 
     for (trick_idx, &player_die) in player_hand.iter().enumerate() {
-        let mut next = vec![vec![0.0f64; player_count]; hand_size + 1];
-        for (wins_so_far, seat_probs) in dp.iter().enumerate().take(trick_idx + 1) {
-            for (seat, &state_prob) in seat_probs.iter().enumerate() {
+        let mut next_prob = vec![vec![0.0f64; player_count]; hand_size + 1];
+        let mut next_remaining_sum =
+            vec![vec![vec![0.0f64; DieType::ALL.len()]; player_count]; hand_size + 1];
+
+        for wins_so_far in 0..=trick_idx {
+            for seat in 0..player_count {
+                let state_prob = dp_prob[wins_so_far][seat];
                 if state_prob == 0.0 {
                     continue;
                 }
+                let state_remaining: Vec<f64> = dp_remaining_sum[wins_so_far][seat]
+                    .iter()
+                    .map(|&weighted| weighted / state_prob)
+                    .collect();
 
-                let winner_dist = exact_single_trick_winner_distribution_from_remaining(
-                    player_hand,
+                let transition = bag_aware_single_trick_transition(
+                    &state_remaining,
                     player_die,
                     player_count,
                     seat,
                 );
 
-                for (winner_seat, &winner_prob) in winner_dist.iter().enumerate() {
+                for (winner_seat, &winner_prob) in transition.winner_probs.iter().enumerate() {
                     if winner_prob == 0.0 {
                         continue;
                     }
@@ -257,14 +278,156 @@ pub fn analytical_trick_count_distribution(
                     } else {
                         wins_so_far
                     };
-                    next[next_wins][next_seat] += state_prob * winner_prob;
+
+                    let transition_prob = state_prob * winner_prob;
+                    next_prob[next_wins][next_seat] += transition_prob;
+
+                    for t in 0..DieType::ALL.len() {
+                        let expected_draw = transition.winner_expected_draw_counts[winner_seat][t];
+                        let remaining_after = (state_remaining[t] - expected_draw).max(0.0);
+                        next_remaining_sum[next_wins][next_seat][t] +=
+                            transition_prob * remaining_after;
+                    }
                 }
             }
         }
-        dp = next;
+
+        dp_prob = next_prob;
+        dp_remaining_sum = next_remaining_sum;
     }
 
-    (0..=hand_size).map(|wins| dp[wins].iter().sum()).collect()
+    (0..=hand_size)
+        .map(|wins| dp_prob[wins].iter().sum())
+        .collect()
+}
+
+fn remaining_counts_after_removing_hand(player_hand: &[DieType]) -> Vec<usize> {
+    let die_types = DieType::ALL;
+    let mut remaining_counts: Vec<usize> = die_types
+        .iter()
+        .map(|&dt| dt.bag_count() as usize)
+        .collect();
+    for &removed_die in player_hand {
+        let player_idx = die_types
+            .iter()
+            .position(|&dt| dt == removed_die)
+            .expect("player die must be in DieType::ALL");
+        remaining_counts[player_idx] -= 1;
+    }
+    remaining_counts
+}
+
+struct BagAwareTrickTransition {
+    winner_probs: Vec<f64>,
+    winner_expected_draw_counts: Vec<Vec<f64>>,
+}
+
+fn bag_aware_single_trick_transition(
+    remaining_counts: &[f64],
+    player_die: DieType,
+    player_count: usize,
+    player_position: usize,
+) -> BagAwareTrickTransition {
+    let mut winner_probs = vec![0.0f64; player_count];
+    let mut winner_draw_weighted_sum = vec![vec![0.0f64; DieType::ALL.len()]; player_count];
+    let mut opp_dice = Vec::with_capacity(player_count - 1);
+    let mut draw_counts = vec![0usize; DieType::ALL.len()];
+    enumerate_bag_aware_opponent_draws(
+        remaining_counts.to_vec(),
+        player_count - 1,
+        1.0,
+        &mut opp_dice,
+        &mut draw_counts,
+        player_die,
+        player_position,
+        &mut winner_probs,
+        &mut winner_draw_weighted_sum,
+    );
+
+    let mut winner_expected_draw_counts = vec![vec![0.0f64; DieType::ALL.len()]; player_count];
+    for winner_seat in 0..player_count {
+        let winner_prob = winner_probs[winner_seat];
+        if winner_prob == 0.0 {
+            continue;
+        }
+        for die_idx in 0..DieType::ALL.len() {
+            winner_expected_draw_counts[winner_seat][die_idx] =
+                winner_draw_weighted_sum[winner_seat][die_idx] / winner_prob;
+        }
+    }
+
+    BagAwareTrickTransition {
+        winner_probs,
+        winner_expected_draw_counts,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn enumerate_bag_aware_opponent_draws(
+    remaining_counts: Vec<f64>,
+    slots_left: usize,
+    draw_prob: f64,
+    opp_dice: &mut Vec<DieType>,
+    draw_counts: &mut [usize],
+    player_die: DieType,
+    player_position: usize,
+    winner_probs: &mut [f64],
+    winner_draw_weighted_sum: &mut [Vec<f64>],
+) {
+    if slots_left == 0 {
+        let mut all_dice = Vec::with_capacity(opp_dice.len() + 1);
+        let mut opp_iter = opp_dice.iter().copied();
+        for seat in 0..(opp_dice.len() + 1) {
+            if seat == player_position {
+                all_dice.push(player_die);
+            } else {
+                all_dice.push(opp_iter.next().expect("missing opponent die"));
+            }
+        }
+
+        let seat_win_probs = win_probabilities_for_all_seats(&all_dice);
+        for winner_seat in 0..winner_probs.len() {
+            let weighted = draw_prob * seat_win_probs[winner_seat];
+            winner_probs[winner_seat] += weighted;
+            for die_idx in 0..DieType::ALL.len() {
+                winner_draw_weighted_sum[winner_seat][die_idx] +=
+                    weighted * draw_counts[die_idx] as f64;
+            }
+        }
+        return;
+    }
+
+    let remaining_total: f64 = remaining_counts.iter().sum();
+    if remaining_total <= 0.0 {
+        return;
+    }
+
+    for (die_idx, &die_type) in DieType::ALL.iter().enumerate() {
+        let count = remaining_counts[die_idx];
+        if count <= 1e-12 {
+            continue;
+        }
+
+        let mut next_counts = remaining_counts.clone();
+        next_counts[die_idx] = (next_counts[die_idx] - 1.0).max(0.0);
+        let next_draw_prob = draw_prob * (count / remaining_total);
+
+        opp_dice.push(die_type);
+        draw_counts[die_idx] += 1;
+        enumerate_bag_aware_opponent_draws(
+            next_counts,
+            slots_left - 1,
+            next_draw_prob,
+            opp_dice,
+            draw_counts,
+            player_die,
+            player_position,
+            winner_probs,
+            winner_draw_weighted_sum,
+        );
+        draw_counts[die_idx] -= 1;
+        opp_dice.pop();
+    }
 }
 
 /// Estimates P(tricks = k) for a specific player hand by Monte Carlo simulation.
@@ -1138,6 +1301,68 @@ mod tests {
             max_delta > 1e-6,
             "improved={improved:?}, legacy={legacy_dp:?}"
         );
+    }
+
+    fn legacy_inter_trick_distribution(
+        hand: &[DieType],
+        player_count: usize,
+        player_position: usize,
+    ) -> Vec<f64> {
+        let hand_size = hand.len();
+        let mut dp = vec![vec![0.0f64; player_count]; hand_size + 1];
+        dp[0][player_position] = 1.0;
+
+        for (trick_idx, &player_die) in hand.iter().enumerate() {
+            let mut next = vec![vec![0.0f64; player_count]; hand_size + 1];
+            for (wins_so_far, seat_probs) in dp.iter().enumerate().take(trick_idx + 1) {
+                for (seat, &state_prob) in seat_probs.iter().enumerate() {
+                    if state_prob == 0.0 {
+                        continue;
+                    }
+
+                    let winner_dist = exact_single_trick_winner_distribution_from_remaining(
+                        hand,
+                        player_die,
+                        player_count,
+                        seat,
+                    );
+
+                    for (winner_seat, &winner_prob) in winner_dist.iter().enumerate() {
+                        if winner_prob == 0.0 {
+                            continue;
+                        }
+                        let next_seat = (seat + player_count - winner_seat) % player_count;
+                        let next_wins = if winner_seat == seat {
+                            wins_so_far + 1
+                        } else {
+                            wins_so_far
+                        };
+                        next[next_wins][next_seat] += state_prob * winner_prob;
+                    }
+                }
+            }
+            dp = next;
+        }
+
+        (0..=hand_size).map(|wins| dp[wins].iter().sum()).collect()
+    }
+
+    #[test]
+    fn bag_aware_dp_changes_distribution_from_legacy_inter_trick_dp() {
+        let hand = vec![DieType::Mermaid, DieType::Red, DieType::Gray];
+        let player_count = 4;
+        let player_position = 0;
+
+        let improved = analytical_trick_count_distribution(&hand, player_count, player_position);
+        let legacy = legacy_inter_trick_distribution(&hand, player_count, player_position);
+        let max_delta = improved
+            .iter()
+            .zip(legacy.iter())
+            .map(|(left, right)| (left - right).abs())
+            .fold(0.0_f64, f64::max);
+
+        assert!(max_delta > 1e-6, "improved={improved:?}, legacy={legacy:?}");
+        assert!((improved.iter().sum::<f64>() - 1.0).abs() < 1e-9);
     }
 
     #[test]
