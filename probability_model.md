@@ -34,9 +34,9 @@ Example (Red):
 For fixed dice in one trick, winner probability is exact enumeration:
 
 $$
-P(\text{seat } t \text{ wins})
+P(\mathrm{seat}\ t\ \mathrm{wins})
 =
-\sum_{\mathbf{f}} \mathbf{1}[\text{winner}(\mathbf{f})=t]\prod_i P(f_i)
+\sum_{\mathbf{f}:\,\mathrm{winner}(\mathbf{f})=t}\prod_i P(f_i)
 $$
 
 Winner rules:
@@ -140,11 +140,16 @@ Die-choice policy in simulation:
 
 ## 7. Why DP and Monte Carlo Differ
 
-DP still approximates full trajectories. Main reasons for gap:
+DP still approximates full trajectories. Main reasons for gap include:
 
-1. Opponent behavior is represented through per-trick marginals, not full hand-level plans across all tricks.
-2. State is reduced (wins + seat), not full remaining-hand state for every player.
-3. Cross-trick coupling from depletion and tactical sequencing is only partially captured.
+1. Opponent modeling is marginal at trick level. DP uses winner probabilities per trick state, while Monte Carlo samples concrete opponent hands and keeps those hands fixed through the round.
+2. State compression loses information. DP state tracks only wins and seat; it does not track each player's remaining dice multiset, which strongly affects later legal moves and win odds.
+3. Inter-trick dependence is only partially represented. In Monte Carlo, an early trick result changes both leader and future legal choices through explicit hand depletion; DP approximates this through reduced transitions.
+4. Policy realism differs. Monte Carlo applies explicit legal-play policy (follow-suit plus optional special), while DP uses aggregated winner probabilities and does not model micro-level choice paths directly.
+5. Nonlinear bonus events are path dependent. Special-capture bonuses depend on specific face combinations and trick outcomes; DP trick-count distribution alone does not encode those event paths.
+6. Opponent-opponent interactions are explicit only in Monte Carlo. DP focuses on the target player's compressed process, while Monte Carlo simulates full table interaction every trick.
+7. Finite-sample noise exists in Monte Carlo outputs. Even with 100000 replications, small probability cells can fluctuate and create small apparent gaps.
+8. Numerical/rounding presentation can amplify visible differences. Reporting percentages to two decimals and expectations to four decimals can make tiny differences look larger than their practical impact.
 
 So DP is the fast estimator; Monte Carlo is the higher-fidelity behavioral simulator.
 

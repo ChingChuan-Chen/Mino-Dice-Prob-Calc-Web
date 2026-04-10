@@ -307,6 +307,7 @@ mod tests {
         TrickDistInput {
             hand: hand.iter().map(|s| s.to_string()).collect(),
             opponent_hands: vec![opp_hand.iter().map(|s| s.to_string()).collect()],
+            expected_bonus_points: None,
         }
     }
 
