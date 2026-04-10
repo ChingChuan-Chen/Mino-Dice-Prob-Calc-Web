@@ -351,6 +351,12 @@ mod tests {
         assert!(inner_trick_distribution(input).is_err());
     }
 
+    #[test]
+    fn parse_die_type_accepts_mixed_case() {
+        assert_eq!(parse_die_type_str("ReD").unwrap(), DieType::Red);
+        assert_eq!(parse_die_type_str("mErMaId").unwrap(), DieType::Mermaid);
+    }
+
     // --- win probability ---
 
     #[test]
@@ -390,6 +396,16 @@ mod tests {
         assert!(inner_win_probability(input).is_err());
     }
 
+    #[test]
+    fn invalid_led_color_errors() {
+        let input = WinProbInput {
+            player_dice: vec!["red".to_string(), "yellow".to_string()],
+            led_color: Some("banana".to_string()),
+            target_idx: 0,
+        };
+        assert!(inner_win_probability(input).is_err());
+    }
+
     // --- simulation ---
 
     #[test]
@@ -417,6 +433,23 @@ mod tests {
         .unwrap();
         assert_eq!(output.len(), 3);
         assert!(output[0].probability >= output[1].probability);
+    }
+
+    #[test]
+    fn top_opponent_patterns_limit_is_clamped() {
+        let hand = vec!["red".into(), "yellow".into(), "gray".into()];
+        let low = inner_top_opponent_patterns(OpponentPatternsInput {
+            hand: hand.clone(),
+            limit: Some(0),
+        })
+        .unwrap();
+        let high = inner_top_opponent_patterns(OpponentPatternsInput {
+            hand,
+            limit: Some(99),
+        })
+        .unwrap();
+        assert_eq!(low.len(), 1);
+        assert_eq!(high.len(), 10);
     }
 
     #[test]

@@ -566,6 +566,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "trick must have at least one roll")]
+    fn trick_winner_panics_on_empty_rolls() {
+        let _ = trick_winner(&[]);
+    }
+
+    #[test]
     fn reference_table_matches_direct_enumeration_samples() {
         let cases: Vec<(Vec<DieType>, usize)> = vec![
             (vec![DieType::Red, DieType::Yellow, DieType::Purple], 0),
@@ -612,5 +618,18 @@ mod tests {
         let probs = win_probabilities_for_all_seats(&hand);
         let total: f64 = probs.iter().sum();
         assert!((total - 1.0).abs() < 1e-12, "probs={probs:?} total={total}");
+    }
+
+    #[test]
+    fn all_seat_probabilities_match_dynamic_enumeration() {
+        let hand = vec![DieType::Mermaid, DieType::Red, DieType::Gray];
+        let from_table = win_probabilities_for_all_seats(&hand);
+        let dynamic = win_probabilities_for_all_seats_dynamic(&hand);
+        for (a, b) in from_table.iter().zip(dynamic.iter()) {
+            assert!(
+                (a - b).abs() < 1e-12,
+                "from_table={from_table:?} dynamic={dynamic:?}"
+            );
+        }
     }
 }
