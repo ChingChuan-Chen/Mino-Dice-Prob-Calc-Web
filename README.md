@@ -51,6 +51,27 @@ cargo clippy
 cargo fmt --all -- --check
 ```
 
+## Test Quality Review and Coverage
+
+Current tests include both happy-path checks and edge-case checks:
+
+- **Happy-path examples**: output shape checks for simulation APIs, normal score calculations, and standard winner resolution cases.
+- **Edge-case examples**: invalid inputs (`target_idx`, invalid die names, invalid round bounds), all-flag trick tie behavior, special-cycle interactions, deterministic table-vs-enumeration parity, and limit clamping for opponent-pattern queries.
+
+Coverage snapshot (from `cargo llvm-cov --lib --summary-only`, 2026-04-10):
+
+| Scope | Region Coverage | Function Coverage | Line Coverage |
+|---|---:|---:|---:|
+| `src/dice.rs` | 94.15% | 90.48% | 94.56% |
+| `src/trick.rs` | 95.33% | 94.34% | 97.40% |
+| `src/round.rs` | 98.43% | 99.01% | 97.86% |
+| `src/api.rs` | 78.57% | 75.51% | 83.93% |
+| **Total (lib target)** | **64.28%** | **66.03%** | **68.25%** |
+
+Notes:
+- Total coverage is reduced by currently untested UI/chart entry points (`src/ui.rs`, `src/chart.rs`, and wasm startup in `src/lib.rs`).
+- Core probability/round/trick logic is highly covered by unit tests.
+
 ## SQLite Probability Lookup (Native)
 
 For native runs and tests, you can preload the single-trick probability table into SQLite
@@ -79,4 +100,3 @@ instead of comma-separated die-name strings.
 - [Mino Dice Rules](mino_dice_rule.md)
 - [Probability Model](probability_model.md)
 - [Roadmap](roadmap.md)
-
