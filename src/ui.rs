@@ -4,6 +4,7 @@ use web_sys::{Document, Element, Event, HtmlCanvasElement, HtmlInputElement, Mou
 use crate::dice::DieType;
 use crate::round::{
     Xorshift64, analytical_trick_count_distribution, exact_single_trick_distribution, expected_score_for_bid,
+    expected_tricks,
     monte_carlo_special_capture_stats, monte_carlo_trick_count_distribution, optimal_bid,
     round_count, top_opponent_hand_patterns,
 };
@@ -301,14 +302,6 @@ fn sync_calc_method_controls(doc: &Document) {
             "class",
             if method == "monte-carlo" { ACTIVE_PC } else { INACTIVE_PC },
         );
-    }
-
-    if let Some(note) = doc.get_element_by_id("calc-method-note") {
-        note.set_text_content(Some(if method == "dp" {
-            "DP uses exact single-trick win probabilities and folds them into a full-hand distribution."
-        } else {
-            "Monte Carlo samples opponent hands and simulates rounds; replications and seed control the estimate."
-        }));
     }
 }
 
@@ -645,8 +638,9 @@ fn redraw_chart_from_state(doc: &Document) -> Result<(), JsValue> {
     let optimal_bid = get_hidden_string(doc, "last-optimal-bid")
         .parse::<usize>()
         .unwrap_or(0);
+    let exp_tricks = expected_tricks(&dist);
     hide_chart_tooltip(doc);
-    crate::chart::draw_trick_distribution("chart", &dist, optimal_bid)
+    crate::chart::draw_trick_distribution("chart", &dist, optimal_bid, exp_tricks)
 }
 
 fn update_chart_tooltip(doc: &Document, event: &MouseEvent) -> Result<(), JsValue> {

@@ -28,10 +28,12 @@ const BAR_COLORS: &[RGBColor] = &[
 /// * `canvas_id`  – DOM id of the `<canvas>` element.
 /// * `dist`       – P(tricks = k) for k = 0..=hand_size; length = hand_size + 1.
 /// * `optimal_bid` – highlighted bar index.
+/// * `expected_trick_count` – expected number of tricks for title annotation.
 pub fn draw_trick_distribution(
     canvas_id: &str,
     dist: &[f64],
     optimal_bid: usize,
+    expected_trick_count: f64,
 ) -> Result<(), JsValue> {
     resize_canvas_to_client_width(canvas_id, 0.5)?;
 
@@ -44,12 +46,13 @@ pub fn draw_trick_distribution(
 
     let max_p = dist.iter().cloned().fold(0.0f64, f64::max).max(0.01);
     let n = dist.len();
+    let caption = format!(
+        "Trick-Count Probability (Expected Trick Count: {:.3})",
+        expected_trick_count
+    );
 
     let mut chart = ChartBuilder::on(&root)
-        .caption(
-            "Trick-Count Probability",
-            ("sans-serif", 16).into_font().color(&CHART_TEXT),
-        )
+        .caption(caption, ("sans-serif", 16).into_font().color(&CHART_TEXT))
         .margin(16)
         .x_label_area_size(36)
         .y_label_area_size(50)
