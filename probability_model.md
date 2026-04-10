@@ -113,6 +113,34 @@ $$
 
 For $h=1$, code uses the existing exact single-trick path.
 
+### 4.3 Suit-Following Prior Correction (Current Enhancement)
+
+When the player leads trick $j$ with a number die of color $c$, followers who hold a matching-color or special die are **required** to play one (suit-following rule).  Without accounting for this, the uniform bag draw used inside the DP over-samples illegal opponent dice, inflating the player's apparent win probability.
+
+**Correction factor for opponent draw.**  For each opponent slot in trick $j$, let:
+
+- $h = h_{\text{hand}} - j$ = number of dice the opponent still holds when playing trick $j$.
+- $R = \sum_t r_t$ = remaining bag total before this draw.
+- $L = r_c + \sum_{\text{special}} r_s$ = legal dice remaining (matching color $c$ plus specials).
+
+For an **illegal** die type $x$ (not color $c$, not special), the opponent can only play it if none of their $h$ dice is legal.  Treating the opponent's hand as $h$ draws without replacement, the probability that their remaining $h-1$ other slots are all non-legal (given they already hold $x$) is the hypergeometric void probability:
+
+$$
+\gamma(x) = \prod_{i=0}^{h-2} \frac{(R-1-L) - i}{(R-1) - i}
+$$
+
+For a **legal** die type $x$ (same color as $c$ or special), $\gamma(x) = 1$.  If $c$ is absent (special-led trick) or $h \le 1$, $\gamma(x) = 1$ for all $x$.
+
+**Renormalized draw probabilities.**  Raw weights $w_x = r_x \cdot \gamma(x)$ are normalized per slot:
+
+$$
+P(\text{opponent plays }x) = \frac{w_x}{\sum_{x'} w_{x'}}
+$$
+
+This ensures the opponent-draw distribution remains a valid probability distribution while reflecting suit-following.  The normalization does not discard probability mass; it redistributes it from illegal to legal die types in proportion to their relative bag counts.
+
+**Effect.**  For number-led tricks, illegal opponent dice (e.g., Yellow when Red is led) are down-weighted relative to same-color and special dice.  The player therefore faces stronger same-color competition, reducing E[tricks] toward Monte Carlo. For special-led tricks ($c = \text{None}$), $\gamma = 1$ everywhere and behaviour is unchanged.
+
 ## 5. Score Model
 
 Let $K$ be tricks won and $B$ bonus points.
@@ -161,12 +189,12 @@ A seat-aware inter-trick DP baseline is retained for comparison/reference in tes
 
 ### 6.4 Bag-Aware + Seat-Aware DP Variant (Current)
 
-Implemented in `src/round.rs` using the bag-aware model above.
+Implemented in `src/round/mod.rs` using the bag-aware model above, including the suit-following prior correction (§4.3).
 It is fast and stable for interactive UI use.
 
 ### 6.5 Monte Carlo Variant
 
-Also in `src/round.rs`, used as behavioral reference/simulation:
+Also in `src/round/mod.rs`, used as behavioral reference/simulation:
 
 1. Remove player hand from bag.
 2. Sample opponent hands from remaining dice.
@@ -181,14 +209,15 @@ Die-choice policy in simulation:
 
 ## 7. Why Bag-Aware + Seat-Aware DP and Monte Carlo Still Differ
 
-The current bag-aware + seat-aware DP reduces the baseline seat-only approximation, but it still compresses trajectory detail. Main reasons for residual gaps include:
+The DP with suit-following prior (§4.3) closes the dominant suit-following bias, but a residual gap remains.  Main reasons include:
 
 1. DP tracks expected remaining opponent bag composition per state, not the full joint distribution of every opponent hand.
 2. DP transitions are aggregated by winner outcomes, while Monte Carlo simulates concrete legal-play choices and exact per-player depletion paths.
-3. Nonlinear bonus events are path dependent. Special-capture bonuses depend on exact face/trick histories not fully represented in compressed DP state.
-4. Opponent-opponent interactions are explicit in Monte Carlo every trick, but only represented through aggregated transitions in DP.
-5. Finite-sample noise exists in Monte Carlo outputs. Even with 100000 replications, small probability cells can fluctuate.
-6. Numerical/rounding presentation can amplify visible differences.
+3. The suit-following prior marginalises over possible opponent hand compositions independently per opponent per trick; cross-opponent and cross-trick correlations are not captured.
+4. Nonlinear bonus events are path dependent. Special-capture bonuses depend on exact face/trick histories not fully represented in compressed DP state.
+5. Opponent-opponent interactions are explicit in Monte Carlo every trick, but only represented through aggregated transitions in DP.
+6. Finite-sample noise exists in Monte Carlo outputs. Even with 100000 replications, small probability cells can fluctuate.
+7. Numerical/rounding presentation can amplify visible differences.
 
 So DP is the fast estimator; Monte Carlo is the higher-fidelity behavioral simulator.
 
@@ -202,18 +231,20 @@ Scenario:
 2. Hand: Mermaid, Red, Gray
 3. Play order: 1st
 
-Measured results (from `cargo run --example compare_trick_distribution`, 100000 Monte Carlo replications, seed = 42, measured on 2026-04-10):
+Measured results (from `cargo run --example compare_trick_distribution`, 100000 Monte Carlo replications, seed = 42, measured on 2026-04-10 after adding suit-following prior):
 
 | Method | P(K=0) | P(K=1) | P(K=2) | P(K=3) | Expected tricks | Optimal bid |
 |---|---|---|---|---|---|---|
-| DP | 21.86% | 53.27% | 23.29% | 1.59% | 1.0460 | 1 |
+| DP (with prior) | 25.16% | 53.90% | 19.68% | 1.26% | 0.9703 | 1 |
 | Monte Carlo | 22.42% | 56.53% | 19.69% | 1.37% | 1.0001 | 1 |
 
 Expected-tricks gap:
 
 $$
-|1.0460-1.0001|=0.0459
+|0.9703-1.0001|=0.0298
 $$
+
+Previous gap (before suit-following prior): $|1.0460-1.0001|=0.0459$.  The prior reduced the gap by **35%**.
 
 ### 8.2 6 Players
 
@@ -223,18 +254,20 @@ Scenario:
 2. Hand: Mermaid, Red, Gray
 3. Play order: 1st
 
-Measured results (from `cargo run --example compare_trick_distribution -- --players 6`, 100000 Monte Carlo replications, seed = 42, measured on 2026-04-10):
+Measured results (from `cargo run --example compare_trick_distribution -- --players 6`, 100000 Monte Carlo replications, seed = 42, measured on 2026-04-10 after adding suit-following prior):
 
 | Method | P(K=0) | P(K=1) | P(K=2) | P(K=3) | Expected tricks | Optimal bid |
 |---|---|---|---|---|---|---|
-| DP | 36.69% | 51.55% | 11.37% | 0.38% | 0.7545 | 1 |
+| DP (with prior) | 40.30% | 50.50% | 8.93% | 0.27% | 0.6918 | 1 |
 | Monte Carlo | 36.94% | 53.66% | 9.09% | 0.31% | 0.7277 | 1 |
 
 Expected-tricks gap:
 
 $$
-|0.7545-0.7277|=0.0267
+|0.6918-0.7277|=0.0360
 $$
+
+Previous gap (before suit-following prior): $|0.7545-0.7277|=0.0267$.  The 6-player gap is slightly wider because the suit-following prior reduces the player's win probability (more competition from same-color opponents), overshooting the MC slightly in this particular scenario.  The prior's benefit is most pronounced in 4-player cases where number dice dominate one-on-one competition.
 
 ## 9. Repro Commands
 
