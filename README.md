@@ -119,4 +119,5 @@ instead of comma-separated die-name strings.
 
 - [Mino Dice Rules](mino_dice_rule.md)
 - [Probability Model](probability_model.md)
+- [Runtime Benchmarks](benchmark.md)
 - [Roadmap](roadmap.md)
