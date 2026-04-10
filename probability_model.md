@@ -48,32 +48,31 @@ Winner rules:
 
 At most 6 players and at most 3 merged outcomes per die gives at most $3^6=729$ outcome tuples per trick.
 
-## 4. Full-Hand Distribution Model (Bag-Aware DP)
+## 4. Full-Hand Distribution Model
 
-For hand size $h$, DP state tracks both wins/seat probability and expected remaining opponent bag composition.
+This project keeps both approaches:
 
-Seat-state probability:
+1. Seat-aware inter-trick DP (baseline).
+2. Bag-aware + seat-aware DP (current improved estimator).
+
+### 4.1 Seat-Aware Inter-Trick DP (Baseline)
+
+For hand size $h$, define state by wins and current seat:
 
 $$
 \mathrm{dp}_j[k,s]=P(\text{after } j \text{ tricks: wins}=k,\text{ seat}=s)
 $$
 
-Per-state expected remaining opponent bag (die-type index $t$):
+Given seat $s$, let winner probability be:
 
 $$
-\mathrm{rem}_j[k,s,t]=E[\text{remaining count of die type }t\mid j,k,s]
+q_j(w\mid s)
 $$
 
-For trick $j$, winner probabilities are conditioned on current seat and remaining bag estimate:
+Transition:
 
 $$
-q_j(w\mid s,\mathrm{rem}_j[k,s,\cdot])
-$$
-
-State transition:
-
-$$
-\mathrm{dp}_{j+1}[k',s'] += \mathrm{dp}_j[k,s]\cdot q_j(w\mid s,\mathrm{rem}_j[k,s,\cdot])
+\mathrm{dp}_{j+1}[k',s'] += \mathrm{dp}_j[k,s]\cdot q_j(w\mid s)
 $$
 
 where
@@ -82,7 +81,29 @@ $$
 s'=(s-w)\bmod n,\qquad k'=k+\mathbf{1}[w=s]
 $$
 
-For each winner outcome, the expected opponent draw composition is removed from the state bag expectation before accumulating into $\mathrm{rem}_{j+1}$.
+### 4.2 Bag-Aware + Seat-Aware DP (Current)
+
+Current DP keeps the same seat transition, and additionally tracks expected remaining opponent bag composition.
+
+Per-state expected remaining opponent bag (die-type index $t$):
+
+$$
+\mathrm{rem}_j[k,s,t]=E[\text{remaining count of die type }t\mid j,k,s]
+$$
+
+Winner probabilities are then conditioned on both seat and expected remaining bag:
+
+$$
+q_j(w\mid s,\mathrm{rem}_j[k,s,\cdot])
+$$
+
+Transition keeps the same seat-update formula:
+
+$$
+\mathrm{dp}_{j+1}[k',s'] += \mathrm{dp}_j[k,s]\cdot q_j(w\mid s,\mathrm{rem}_j[k,s,\cdot])
+$$
+
+For each winner outcome, expected opponent draw composition is removed from state bag expectation before accumulating into $\mathrm{rem}_{j+1}$.
 
 Final trick-count distribution:
 
@@ -134,12 +155,16 @@ Storage format:
 
 This compact integer key replaces long string keys and improves storage/index efficiency.
 
-### 6.3 Bag-Aware DP Variant
+### 6.3 Seat-Aware Inter-Trick DP Variant (Baseline)
+
+A seat-aware inter-trick DP baseline is retained for comparison/reference in tests and analysis.
+
+### 6.4 Bag-Aware + Seat-Aware DP Variant (Current)
 
 Implemented in `src/round.rs` using the bag-aware model above.
 It is fast and stable for interactive UI use.
 
-### 6.4 Monte Carlo Variant
+### 6.5 Monte Carlo Variant
 
 Also in `src/round.rs`, used as behavioral reference/simulation:
 
@@ -154,9 +179,9 @@ Die-choice policy in simulation:
 2. If no matching color exists, all remaining dice are legal.
 3. If multiple legal choices exist, choose uniformly among legal choices.
 
-## 7. Why Bag-Aware DP and Monte Carlo Still Differ
+## 7. Why Bag-Aware + Seat-Aware DP and Monte Carlo Still Differ
 
-Bag-aware DP reduces the previous inter-trick independence approximation, but it still compresses trajectory detail. Main reasons for residual gaps include:
+The current bag-aware + seat-aware DP reduces the baseline seat-only approximation, but it still compresses trajectory detail. Main reasons for residual gaps include:
 
 1. DP tracks expected remaining opponent bag composition per state, not the full joint distribution of every opponent hand.
 2. DP transitions are aggregated by winner outcomes, while Monte Carlo simulates concrete legal-play choices and exact per-player depletion paths.
@@ -181,13 +206,13 @@ Measured results (from `cargo run --example compare_trick_distribution`, 100000 
 
 | Method | P(K=0) | P(K=1) | P(K=2) | P(K=3) | Expected tricks | Optimal bid |
 |---|---|---|---|---|---|---|
-| DP | 22.26% | 52.58% | 23.47% | 1.69% | 1.0459 | 1 |
+| DP | 21.86% | 53.27% | 23.29% | 1.59% | 1.0460 | 1 |
 | Monte Carlo | 22.42% | 56.53% | 19.69% | 1.37% | 1.0001 | 1 |
 
 Expected-tricks gap:
 
 $$
-|1.0459-1.0001|=0.0458
+|1.0460-1.0001|=0.0459
 $$
 
 ### 8.2 6 Players
@@ -202,13 +227,13 @@ Measured results (from `cargo run --example compare_trick_distribution -- --play
 
 | Method | P(K=0) | P(K=1) | P(K=2) | P(K=3) | Expected tricks | Optimal bid |
 |---|---|---|---|---|---|---|
-| DP | 37.27% | 50.41% | 11.84% | 0.48% | 0.7552 | 1 |
+| DP | 36.69% | 51.55% | 11.37% | 0.38% | 0.7545 | 1 |
 | Monte Carlo | 36.94% | 53.66% | 9.09% | 0.31% | 0.7277 | 1 |
 
 Expected-tricks gap:
 
 $$
-|0.7552-0.7277|=0.0275
+|0.7545-0.7277|=0.0267
 $$
 
 ## 9. Repro Commands
