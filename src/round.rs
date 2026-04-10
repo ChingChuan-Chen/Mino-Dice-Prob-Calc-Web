@@ -234,9 +234,8 @@ pub fn analytical_trick_count_distribution(
 
     for (trick_idx, &player_die) in player_hand.iter().enumerate() {
         let mut next = vec![vec![0.0f64; player_count]; hand_size + 1];
-        for wins_so_far in 0..=trick_idx {
-            for seat in 0..player_count {
-                let state_prob = dp[wins_so_far][seat];
+        for (wins_so_far, seat_probs) in dp.iter().enumerate().take(trick_idx + 1) {
+            for (seat, &state_prob) in seat_probs.iter().enumerate() {
                 if state_prob == 0.0 {
                     continue;
                 }

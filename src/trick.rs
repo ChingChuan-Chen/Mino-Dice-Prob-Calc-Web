@@ -331,7 +331,7 @@ fn load_single_trick_reference_table_from_sqlite() -> Option<Vec<Vec<f64>>> {
 fn build_single_trick_reference_table() -> Vec<Vec<f64>> {
     let mut per_n: Vec<Vec<f64>> = vec![Vec::new(); 7];
 
-    for n in 3..=6 {
+    for (n, table_slot) in per_n.iter_mut().enumerate().skip(3) {
         let seq_count = 7usize.pow(n as u32);
         let mut table = vec![0.0f64; seq_count * n];
         let mut die_digits = vec![0usize; n];
@@ -349,7 +349,7 @@ fn build_single_trick_reference_table() -> Vec<Vec<f64>> {
             }
         }
 
-        per_n[n] = table;
+        *table_slot = table;
     }
 
     per_n
