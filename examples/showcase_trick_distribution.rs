@@ -112,7 +112,9 @@ fn parse_args() -> Result<ShowcaseConfig, String> {
     }
     let max_dice = round_count(players);
     if dice > max_dice {
-        return Err(format!("--dice must be <= {max_dice} for {players} players"));
+        return Err(format!(
+            "--dice must be <= {max_dice} for {players} players"
+        ));
     }
     if position >= players {
         return Err("--position must be in 0..players-1".to_string());

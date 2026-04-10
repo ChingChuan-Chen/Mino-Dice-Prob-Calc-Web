@@ -86,7 +86,12 @@ pub fn exact_single_trick_distribution(
         "player_position out of range"
     );
 
-    exact_single_trick_distribution_from_remaining(&[player_die], player_die, player_count, player_position)
+    exact_single_trick_distribution_from_remaining(
+        &[player_die],
+        player_die,
+        player_count,
+        player_position,
+    )
 }
 
 fn exact_single_trick_distribution_from_remaining(
@@ -260,9 +265,7 @@ pub fn analytical_trick_count_distribution(
         dp = next;
     }
 
-    (0..=hand_size)
-        .map(|wins| dp[wins].iter().sum())
-        .collect()
+    (0..=hand_size).map(|wins| dp[wins].iter().sum()).collect()
 }
 
 /// Estimates P(tricks = k) for a specific player hand by Monte Carlo simulation.
@@ -1095,7 +1098,10 @@ mod tests {
         let analytical = analytical_trick_count_distribution(&[DieType::Mermaid], 4, 2);
         assert_eq!(analytical.len(), exact.len());
         for (left, right) in analytical.iter().zip(exact.iter()) {
-            assert!((left - right).abs() < 1e-12, "analytical={analytical:?}, exact={exact:?}");
+            assert!(
+                (left - right).abs() < 1e-12,
+                "analytical={analytical:?}, exact={exact:?}"
+            );
         }
     }
 
@@ -1129,7 +1135,10 @@ mod tests {
             .zip(legacy_dp.iter())
             .map(|(left, right)| (left - right).abs())
             .fold(0.0_f64, f64::max);
-        assert!(max_delta > 1e-6, "improved={improved:?}, legacy={legacy_dp:?}");
+        assert!(
+            max_delta > 1e-6,
+            "improved={improved:?}, legacy={legacy_dp:?}"
+        );
     }
 
     #[test]
@@ -1219,12 +1228,20 @@ mod tests {
             }
             assert!(hand[chosen] == DieType::Red || hand[chosen] == DieType::Mermaid);
         }
-        assert!(saw_matching && saw_special, "both matching and special choices should be sampled");
+        assert!(
+            saw_matching && saw_special,
+            "both matching and special choices should be sampled"
+        );
     }
 
     #[test]
     fn choose_die_without_matching_uses_any_remaining_choice() {
-        let hand = vec![DieType::Minotaur, DieType::Gray, DieType::Red, DieType::Yellow];
+        let hand = vec![
+            DieType::Minotaur,
+            DieType::Gray,
+            DieType::Red,
+            DieType::Yellow,
+        ];
         let remaining = vec![0usize, 1, 2];
         let mut rng = Xorshift64::new(7);
         for _ in 0..50 {

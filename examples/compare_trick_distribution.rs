@@ -6,7 +6,9 @@
 ///   cargo run --example compare_trick_distribution -- --players 5 --hand mermaid,red,gray --position 0 --samples 100000 --seed 42
 use mino_dice_prob_calc::{
     dice::DieType,
-    round::{analytical_trick_count_distribution, monte_carlo_trick_count_distribution, Xorshift64},
+    round::{
+        Xorshift64, analytical_trick_count_distribution, monte_carlo_trick_count_distribution,
+    },
 };
 use std::env;
 
@@ -154,11 +156,7 @@ fn main() {
     // Analytical (DP)
     let dp_dist = analytical_trick_count_distribution(&hand, player_count, player_position);
     println!("Analytical (DP):");
-    let dp_expected: f64 = dp_dist
-        .iter()
-        .enumerate()
-        .map(|(k, &p)| k as f64 * p)
-        .sum();
+    let dp_expected: f64 = dp_dist.iter().enumerate().map(|(k, &p)| k as f64 * p).sum();
     for (k, &p) in dp_dist.iter().enumerate() {
         println!("  P(tricks={k}) = {:.4}  ({:.2}%)", p, p * 100.0);
     }
@@ -167,18 +165,21 @@ fn main() {
     // Monte Carlo
     let mut rng = Xorshift64::new(seed);
     let mc_dist = monte_carlo_trick_count_distribution(
-        &hand, player_count, player_position, replications, &mut rng,
+        &hand,
+        player_count,
+        player_position,
+        replications,
+        &mut rng,
     );
     println!("Monte Carlo ({replications} replications, seed={seed}):");
-    let mc_expected: f64 = mc_dist
-        .iter()
-        .enumerate()
-        .map(|(k, &p)| k as f64 * p)
-        .sum();
+    let mc_expected: f64 = mc_dist.iter().enumerate().map(|(k, &p)| k as f64 * p).sum();
     for (k, &p) in mc_dist.iter().enumerate() {
         println!("  P(tricks={k}) = {:.4}  ({:.2}%)", p, p * 100.0);
     }
     println!("  Expected tricks = {mc_expected:.4}\n");
 
-    println!("Gap (|DP expected - MC expected|) = {:.4}", (dp_expected - mc_expected).abs());
+    println!(
+        "Gap (|DP expected - MC expected|) = {:.4}",
+        (dp_expected - mc_expected).abs()
+    );
 }

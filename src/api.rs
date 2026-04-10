@@ -3,9 +3,8 @@ use wasm_bindgen::prelude::*;
 
 use crate::dice::{DieType, face_distribution};
 use crate::round::{
-    Xorshift64, expected_total_score_for_bid, expected_tricks, optimal_bid_with_bonus,
-    round_count, simulate_games, simulate_round_number, top_opponent_hand_patterns,
-    trick_count_distribution,
+    Xorshift64, expected_total_score_for_bid, expected_tricks, optimal_bid_with_bonus, round_count,
+    simulate_games, simulate_round_number, top_opponent_hand_patterns, trick_count_distribution,
 };
 
 fn die_type_to_str(dt: DieType) -> &'static str {

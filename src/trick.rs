@@ -122,7 +122,11 @@ pub fn win_probability(hand: &[DieType], led_color: Option<DieType>, target_idx:
     win_probability_enumerated(hand, led_color, target_idx)
 }
 
-fn win_probability_enumerated(hand: &[DieType], led_color: Option<DieType>, target_idx: usize) -> f64 {
+fn win_probability_enumerated(
+    hand: &[DieType],
+    led_color: Option<DieType>,
+    target_idx: usize,
+) -> f64 {
     let n = hand.len();
     assert!(target_idx < n);
 
@@ -169,7 +173,11 @@ fn win_probability_enumerated(hand: &[DieType], led_color: Option<DieType>, targ
 ///
 /// This function receives the actual die the player will play (`die`) and the
 /// led color from the leader's roll. It returns the correctly weighted face distribution.
-pub fn allowed_faces(die: DieType, _led_color: Option<DieType>, _is_leader: bool) -> Vec<(Face, f64)> {
+pub fn allowed_faces(
+    die: DieType,
+    _led_color: Option<DieType>,
+    _is_leader: bool,
+) -> Vec<(Face, f64)> {
     // All faces of the chosen die with uniform 1/6 probability.
     let faces = die.faces();
     let prob = 1.0 / faces.len() as f64;
@@ -183,10 +191,7 @@ pub fn allowed_faces(die: DieType, _led_color: Option<DieType>, _is_leader: bool
     v
 }
 
-pub fn win_probability_with_suit_context(
-    all_dice: &[DieType],
-    target_idx: usize,
-) -> f64 {
+pub fn win_probability_with_suit_context(all_dice: &[DieType], target_idx: usize) -> f64 {
     assert!(!all_dice.is_empty());
     assert!(target_idx < all_dice.len());
 
@@ -234,7 +239,8 @@ fn lookup_single_trick_reference(all_dice: &[DieType], target_idx: usize) -> Opt
     }
 
     let seq_idx = encode_die_sequence(all_dice)?;
-    let sqlite_table = SQLITE_SINGLE_TRICK_REFERENCE_TABLE.get_or_init(load_single_trick_reference_table_from_sqlite);
+    let sqlite_table = SQLITE_SINGLE_TRICK_REFERENCE_TABLE
+        .get_or_init(load_single_trick_reference_table_from_sqlite);
     if let Some(table) = sqlite_table {
         return Some(table[n][seq_idx * n + target_idx]);
     }
@@ -597,7 +603,12 @@ mod tests {
 
     #[test]
     fn all_seat_probabilities_sum_to_one() {
-        let hand = vec![DieType::Mermaid, DieType::Red, DieType::Gray, DieType::Purple];
+        let hand = vec![
+            DieType::Mermaid,
+            DieType::Red,
+            DieType::Gray,
+            DieType::Purple,
+        ];
         let probs = win_probabilities_for_all_seats(&hand);
         let total: f64 = probs.iter().sum();
         assert!((total - 1.0).abs() < 1e-12, "probs={probs:?} total={total}");
