@@ -115,6 +115,74 @@ If the database is missing or incomplete, the code falls back to the existing in
 The SQLite table stores a compact integer key (`seq_idx`, base-7 encoded ordered dice)
 instead of comma-separated die-name strings.
 
+## Deployment
+
+The app is built as a set of static files by `trunk build --release` and served as-is — no server-side logic required.
+
+### GitHub Actions
+
+Two workflows handle CI and deployment:
+
+- **CI** (`.github/workflows/ci.yml`): runs on every push to `main`. Checks formatting, runs Clippy, runs tests, builds the WASM, enforces size budgets, and uploads `dist/` as the `wasm-build` artifact.
+- **Deploy** (`.github/workflows/deploy.yml`): triggers automatically after CI succeeds on `main`. Downloads the `wasm-build` artifact and `rsync`s it to the self-hosted runner's `DEPLOY_PATH`.
+
+Set `DEPLOY_PATH` as an environment variable on the self-hosted runner (e.g. `/var/www/html`) to control where files land.
+
+### Serving under a sub-path (`/mino`)
+
+`Trunk.toml` sets `public_url = "/mino/"` so all asset references in the generated `index.html` are prefixed with `/mino/`. The deploy workflow syncs `dist/` into `/srv/www/mino/` — a subdirectory that mirrors the URL path — so nginx can use `root` instead of `alias`. This avoids the well-known nginx bug where `try_files` ignores the `alias` path and returns 404.
+
+The ready-to-use nginx config is at [`nginx/20-mino-dice-rust.conf`](nginx/20-mino-dice-rust.conf). Copy it to `/etc/nginx/location.d/` (or `conf.d/`) on the server and reload nginx.
+
+Example nginx configuration:
+
+```nginx
+# Gzip compression (place in http {} block)
+gzip on;
+gzip_types text/html application/javascript application/wasm text/css image/svg+xml;
+gzip_min_length 1024;
+
+# Redirect /mino (no trailing slash) → /mino/
+location = /mino {
+    return 301 /mino/;
+}
+
+# /mino sub-path
+# Files live at /srv/www/mino/ so nginx root + URI resolve correctly.
+location ^~ /mino/ {
+    root /srv/www;
+
+    # index.html — always revalidate (un-hashed entry point)
+    location = /mino/ {
+        root /srv/www;
+        try_files /mino/index.html =404;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma        "no-cache";
+    }
+
+    # Hashed WASM — correct MIME type + long cache
+    location ~* \.wasm$ {
+        root /srv/www;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Content-Type  "application/wasm";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Hashed JS / CSS / images — long cache
+    location ~* \.(js|css|png|svg|ico|webp|woff2?)$ {
+        root /srv/www;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    try_files $uri =404;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+```
+
+> **Note on MIME types**: the `application/wasm` type was added to nginx's default `mime.types` in v1.27. On older releases the explicit `add_header Content-Type` in the `.wasm` block is required.
+
+> **Note on caching**: Trunk embeds a content hash in every JS and WASM filename, so `immutable` is safe — browsers will never serve stale files after a redeploy. `index.html` is the only un-hashed file and must not be cached.
+
 ## Documentation
 
 - [Mino Dice Rules](mino_dice_rule.md)

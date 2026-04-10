@@ -41,4 +41,7 @@ jobs:
 
       - name: Deploy to web root
         run: |
-          rsync -a --delete dist/ "/srv/www/mino-dice"
+          # Files go into the mino/ subdirectory so nginx can use root /srv/www/mino
+          # with location ^~ /mino/ — no alias needed, avoiding the alias+try_files bug.
+          sudo mkdir -p /srv/www/mino
+          sudo rsync -a --delete dist/ /srv/www/mino/
