@@ -76,6 +76,41 @@ $$
 P(K=k)=\sum_s \mathrm{dp}_h[k,s]
 $$
 
+### 4.1 Hand-Aware Extension (Dice-Seat-Hand DP)
+
+The seat-aware DP above removes the **full** player hand from the bag when computing opponent distributions, regardless of which trick is being played. This over-removes dice early on, since in reality only the dice played so far have left the bag.
+
+The hand-aware DP adds a **bitmask** dimension $H$ tracking which of the player's $h$ dice have been played:
+
+$$
+\mathrm{dp}[k,s,H]=P(\text{wins}=k,\;\text{seat}=s,\;\text{played set}=H)
+$$
+
+At each trick, for each state $(k,s,H)$ with $|H|=j$, the player chooses uniformly among remaining dice $\{d_i : i \notin H\}$. For each choice $d_i$:
+
+1. Compute winner distribution $q(w \mid s)$ with only the dice in $H \cup \{d_i\}$ removed from the bag.
+2. Transition:
+
+$$
+\mathrm{dp}[k',s',H \cup \{d_i\}] \mathrel{+}= \mathrm{dp}[k,s,H] \cdot \frac{1}{h-j} \cdot q(w \mid s)
+$$
+
+Final distribution:
+
+$$
+P(K=k) = \sum_{s} \mathrm{dp}[k,s,2^h - 1]
+$$
+
+**State space**: $(h+1) \times n \times 2^h$. For $h=8,\,n=6$: $9 \times 6 \times 256 = 13{,}824$ states — tractable for real-time use.
+
+**Improvements over seat-only DP**:
+
+- More accurate opponent modelling per trick: early tricks see a fuller bag.
+- Player die ordering is explored: all $h!$ orderings contribute (uniformly weighted).
+- Partially addresses gap #2 (state compression) and #3 (inter-trick dependence) from §7.
+
+**Remaining approximations** (same as seat-only DP): opponent hand depletion, suit-following, bonus path dependence, and opponent-opponent interactions are not tracked.
+
 ## 5. Score Model
 
 Let $K$ be tricks won and $B$ bonus points.
@@ -120,10 +155,17 @@ This compact integer key replaces long string keys and improves storage/index ef
 
 ### 6.3 Seat-Aware DP Variant
 
-Implemented in `src/round.rs` using the model above.
+Implemented in `src/round.rs` (`analytical_trick_count_distribution`) using the model in §4.
 It is fast and stable for interactive UI use.
 
-### 6.4 Monte Carlo Variant
+### 6.4 Hand-Aware DP Variant
+
+Implemented in `src/round.rs` (`hand_aware_trick_count_distribution`) using the model in §4.1.
+Adds a bitmask dimension to track which player dice have been played.
+Conditions opponent bag removal on only the dice consumed so far, giving more realistic per-trick opponent distributions.
+Player die-choice policy is uniform random over remaining dice.
+
+### 6.5 Monte Carlo Variant
 
 Also in `src/round.rs`, used as behavioral reference/simulation:
 
@@ -168,12 +210,17 @@ Measured results (from `cargo run --example compare_trick_distribution`, 100000 
 | Method | P(K=0) | P(K=1) | P(K=2) | P(K=3) | Expected tricks | Optimal bid |
 |---|---|---|---|---|---|---|
 | DP | 22.26% | 52.58% | 23.47% | 1.69% | 1.0459 | 1 |
+| Hand-Aware DP | 23.22% | 50.74% | 24.41% | 1.62% | 1.0444 | 1 |
 | Monte Carlo | 22.42% | 56.53% | 19.69% | 1.37% | 1.0001 | 1 |
 
-Expected-tricks gap:
+Expected-tricks gaps:
 
 $$
-|1.0459-1.0001|=0.0458
+|\text{DP} - \text{MC}| = |1.0459 - 1.0001| = 0.0458
+$$
+
+$$
+|\text{Hand-Aware DP} - \text{MC}| = |1.0444 - 1.0001| = 0.0443
 $$
 
 ### 8.2 6 Players
@@ -189,12 +236,17 @@ Measured results (from `cargo run --example compare_trick_distribution -- --play
 | Method | P(K=0) | P(K=1) | P(K=2) | P(K=3) | Expected tricks | Optimal bid |
 |---|---|---|---|---|---|---|
 | DP | 37.27% | 50.41% | 11.84% | 0.48% | 0.7552 | 1 |
+| Hand-Aware DP | 37.43% | 49.74% | 12.38% | 0.44% | 0.7584 | 1 |
 | Monte Carlo | 36.94% | 53.66% | 9.09% | 0.31% | 0.7277 | 1 |
 
-Expected-tricks gap:
+Expected-tricks gaps:
 
 $$
-|0.7552-0.7277|=0.0275
+|\text{DP} - \text{MC}| = |0.7552 - 0.7277| = 0.0275
+$$
+
+$$
+|\text{Hand-Aware DP} - \text{MC}| = |0.7584 - 0.7277| = 0.0306
 $$
 
 ## 9. Repro Commands

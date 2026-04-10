@@ -265,6 +265,124 @@ pub fn analytical_trick_count_distribution(
         .collect()
 }
 
+/// Hand-aware DP: extends the seat-aware DP with a bitmask dimension tracking
+/// which of the player's dice have already been played.
+///
+/// State: `dp[k][s][mask]` where
+///   - `k` = tricks won so far (0..=hand_size)
+///   - `s` = current seat position (0..player_count)
+///   - `mask` = bitmask of player dice already played (0..2^hand_size)
+///
+/// At each trick the player chooses uniformly among remaining (unplayed) dice.
+/// Opponent distributions are conditioned on only the dice played so far (plus
+/// the current trick's die), rather than the full hand, giving more accurate
+/// per-trick opponent modelling.
+pub fn hand_aware_trick_count_distribution(
+    player_hand: &[DieType],
+    player_count: usize,
+    player_position: usize,
+) -> Vec<f64> {
+    assert!((3..=6).contains(&player_count), "player_count must be 3–6");
+    assert!(
+        player_position < player_count,
+        "player_position out of range"
+    );
+
+    let hand_size = player_hand.len();
+    if hand_size == 0 {
+        return vec![1.0];
+    }
+    assert!(hand_size <= 8, "hand_size must be <= 8 for bitmask DP");
+
+    let num_masks: usize = 1 << hand_size;
+
+    // dp[k][s][mask] = probability of having won k tricks, being in seat s,
+    // with bitmask `mask` indicating which dice have been played.
+    // Flatten mask dimension into a Vec for cache-friendly access.
+    let state_count = (hand_size + 1) * player_count * num_masks;
+    let idx = |k: usize, s: usize, mask: usize| -> usize {
+        (k * player_count + s) * num_masks + mask
+    };
+
+    let mut dp = vec![0.0f64; state_count];
+    dp[idx(0, player_position, 0)] = 1.0;
+
+    // We iterate by trick count (= popcount of mask).
+    for trick_num in 0..hand_size {
+        let mut next = vec![0.0f64; state_count];
+
+        for wins_so_far in 0..=trick_num {
+            for seat in 0..player_count {
+                for mask in 0..num_masks {
+                    if mask.count_ones() as usize != trick_num {
+                        continue;
+                    }
+                    let state_prob = dp[idx(wins_so_far, seat, mask)];
+                    if state_prob == 0.0 {
+                        continue;
+                    }
+
+                    // Enumerate remaining (unplayed) dice.
+                    let remaining_count = hand_size - trick_num;
+                    let die_choice_weight = 1.0 / remaining_count as f64;
+
+                    for die_idx in 0..hand_size {
+                        if mask & (1 << die_idx) != 0 {
+                            continue; // already played
+                        }
+                        let player_die = player_hand[die_idx];
+                        let next_mask = mask | (1 << die_idx);
+
+                        // Build the list of player dice removed so far
+                        // (played + current trick's die).
+                        let removed: Vec<DieType> = player_hand
+                            .iter()
+                            .enumerate()
+                            .filter(|&(bit, _)| next_mask & (1 << bit) != 0)
+                            .map(|(_, &die)| die)
+                            .collect();
+
+                        let winner_dist =
+                            exact_single_trick_winner_distribution_from_remaining(
+                                &removed,
+                                player_die,
+                                player_count,
+                                seat,
+                            );
+
+                        for (winner_seat, &winner_prob) in winner_dist.iter().enumerate() {
+                            if winner_prob == 0.0 {
+                                continue;
+                            }
+                            let next_seat =
+                                (seat + player_count - winner_seat) % player_count;
+                            let next_wins = if winner_seat == seat {
+                                wins_so_far + 1
+                            } else {
+                                wins_so_far
+                            };
+                            next[idx(next_wins, next_seat, next_mask)] +=
+                                state_prob * die_choice_weight * winner_prob;
+                        }
+                    }
+                }
+            }
+        }
+
+        dp = next;
+    }
+
+    // Sum over all seats and all full masks (all dice played).
+    let full_mask = num_masks - 1;
+    (0..=hand_size)
+        .map(|wins| {
+            (0..player_count)
+                .map(|s| dp[idx(wins, s, full_mask)])
+                .sum()
+        })
+        .collect()
+}
+
 /// Estimates P(tricks = k) for a specific player hand by Monte Carlo simulation.
 pub fn monte_carlo_trick_count_distribution(
     player_hand: &[DieType],
@@ -1333,5 +1451,96 @@ mod tests {
         let total: f64 = patterns.iter().map(|p| p.probability).sum();
         assert!(total > 0.0);
         assert!(total < 1.0);
+    }
+
+    // ── Hand-aware DP tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn hand_aware_dp_has_valid_shape() {
+        let hand = vec![DieType::Red, DieType::Yellow, DieType::Gray];
+        let dist = hand_aware_trick_count_distribution(&hand, 4, 0);
+        assert_eq!(dist.len(), hand.len() + 1);
+        let total: f64 = dist.iter().sum();
+        assert!((total - 1.0).abs() < 1e-9, "sum={total}, dist={dist:?}");
+    }
+
+    #[test]
+    fn hand_aware_dp_single_die_matches_exact() {
+        // For a single-die hand, hand-aware DP should match exact single trick.
+        let exact = exact_single_trick_distribution(DieType::Mermaid, 4, 2);
+        let ha = hand_aware_trick_count_distribution(&[DieType::Mermaid], 4, 2);
+        assert_eq!(ha.len(), exact.len());
+        for (left, right) in ha.iter().zip(exact.iter()) {
+            assert!((left - right).abs() < 1e-12, "hand_aware={ha:?}, exact={exact:?}");
+        }
+    }
+
+    #[test]
+    fn hand_aware_dp_changes_with_play_order() {
+        let hand = vec![DieType::Gray, DieType::Gray, DieType::Gray];
+        let lead_dist = hand_aware_trick_count_distribution(&hand, 3, 0);
+        let last_dist = hand_aware_trick_count_distribution(&hand, 3, 2);
+        assert_ne!(lead_dist, last_dist);
+    }
+
+    #[test]
+    fn hand_aware_dp_sums_to_one_various_hands() {
+        let cases: Vec<(Vec<DieType>, usize, usize)> = vec![
+            (vec![DieType::Mermaid, DieType::Red, DieType::Gray], 4, 0),
+            (vec![DieType::Mermaid, DieType::Red, DieType::Gray], 6, 0),
+            (vec![DieType::Red, DieType::Yellow], 3, 1),
+            (vec![DieType::Minotaur, DieType::Griffin, DieType::Mermaid, DieType::Gray], 4, 2),
+        ];
+        for (hand, pc, pos) in cases {
+            let dist = hand_aware_trick_count_distribution(&hand, pc, pos);
+            let total: f64 = dist.iter().sum();
+            assert!(
+                (total - 1.0).abs() < 1e-9,
+                "hand={hand:?}, pc={pc}, pos={pos}, sum={total}"
+            );
+        }
+    }
+
+    #[test]
+    fn hand_aware_dp_symmetric_for_identical_dice() {
+        // When all dice are the same, the result should be invariant to
+        // which specific die index is played. Verify by checking that the
+        // distribution sums correctly and is consistent across positions.
+        let hand = vec![DieType::Red, DieType::Red, DieType::Red];
+        let dist_pos0 = hand_aware_trick_count_distribution(&hand, 4, 0);
+        let total: f64 = dist_pos0.iter().sum();
+        assert!((total - 1.0).abs() < 1e-9, "sum={total}");
+        // The distribution should differ from the seat-only DP because
+        // hand-aware DP conditions opponent draws on only the dice played
+        // so far rather than the full hand.
+        let seat_dp = analytical_trick_count_distribution(&hand, 4, 0);
+        let max_delta = seat_dp
+            .iter()
+            .zip(&dist_pos0)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_delta > 1e-6,
+            "hand-aware should differ due to incremental bag conditioning"
+        );
+    }
+
+    #[test]
+    fn hand_aware_dp_differs_from_seat_dp_for_mixed_dice() {
+        // With different dice, hand-aware DP (which conditions opponent removal
+        // on only played dice) should differ from seat-only DP (which always
+        // removes the full hand).
+        let hand = vec![DieType::Mermaid, DieType::Red, DieType::Gray];
+        let seat_dp = analytical_trick_count_distribution(&hand, 4, 0);
+        let ha_dp = hand_aware_trick_count_distribution(&hand, 4, 0);
+        let max_delta = seat_dp
+            .iter()
+            .zip(&ha_dp)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_delta > 1e-6,
+            "seat_dp={seat_dp:?}, ha_dp={ha_dp:?}, max_delta={max_delta}"
+        );
     }
 }

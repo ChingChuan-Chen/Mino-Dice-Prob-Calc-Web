@@ -1,4 +1,4 @@
-/// Compare DP vs Monte Carlo for a configurable scenario.
+/// Compare DP vs Hand-Aware DP vs Monte Carlo for a configurable scenario.
 ///
 /// Usage examples:
 ///   cargo run --example compare_trick_distribution
@@ -6,7 +6,10 @@
 ///   cargo run --example compare_trick_distribution -- --players 5 --hand mermaid,red,gray --position 0 --samples 100000 --seed 42
 use mino_dice_prob_calc::{
     dice::DieType,
-    round::{analytical_trick_count_distribution, monte_carlo_trick_count_distribution, Xorshift64},
+    round::{
+        analytical_trick_count_distribution, hand_aware_trick_count_distribution,
+        monte_carlo_trick_count_distribution, Xorshift64,
+    },
 };
 use std::env;
 
@@ -164,6 +167,19 @@ fn main() {
     }
     println!("  Expected tricks = {dp_expected:.4}\n");
 
+    // Hand-Aware DP
+    let ha_dist = hand_aware_trick_count_distribution(&hand, player_count, player_position);
+    println!("Hand-Aware DP:");
+    let ha_expected: f64 = ha_dist
+        .iter()
+        .enumerate()
+        .map(|(k, &p)| k as f64 * p)
+        .sum();
+    for (k, &p) in ha_dist.iter().enumerate() {
+        println!("  P(tricks={k}) = {:.4}  ({:.2}%)", p, p * 100.0);
+    }
+    println!("  Expected tricks = {ha_expected:.4}\n");
+
     // Monte Carlo
     let mut rng = Xorshift64::new(seed);
     let mc_dist = monte_carlo_trick_count_distribution(
@@ -180,5 +196,6 @@ fn main() {
     }
     println!("  Expected tricks = {mc_expected:.4}\n");
 
-    println!("Gap (|DP expected - MC expected|) = {:.4}", (dp_expected - mc_expected).abs());
+    println!("Gap (|DP expected - MC expected|)          = {:.4}", (dp_expected - mc_expected).abs());
+    println!("Gap (|Hand-Aware DP expected - MC expected|) = {:.4}", (ha_expected - mc_expected).abs());
 }
