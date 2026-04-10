@@ -61,7 +61,7 @@ Size snapshot (Phase 5):
 
 - Baseline: wasm `256,095` bytes (gzip `117,950`), JS `33,485` bytes (gzip `7,080`)
 - Current: wasm `250,979` bytes (gzip `116,101`), JS `32,492` bytes (gzip `6,951`)
-- CI budget (enforced): wasm raw `<= 280,000`, wasm gzip `<= 130,000`
+- CI budget (enforced): wasm raw `<= 308,000`, wasm gzip `<= 143,000`
 - `index.html` keeps Trunk `wasm-opt` enabled via `<link data-trunk rel="rust" data-wasm-opt="z" />`
 
 Quick local size check:
