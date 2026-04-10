@@ -271,9 +271,12 @@ Previous gap (before suit-following prior): $|0.7545-0.7277|=0.0267$.  The 6-pla
 
 ## 9. Repro Commands
 
+Reproduce the calibration results in §8:
+
 ```bash
 cargo run --example compare_trick_distribution
 cargo run --example compare_trick_distribution -- --players 6
-cargo run --example benchmark_6p_static_vs_dynamic
 cargo run --example build_probability_sqlite_db
 ```
+
+For runtime benchmarks (DP vs Monte Carlo speed and accuracy, static table vs dynamic enumeration) see [benchmark.md](benchmark.md).
