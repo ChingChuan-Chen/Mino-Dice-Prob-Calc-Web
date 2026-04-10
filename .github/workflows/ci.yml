@@ -9,6 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  WASM_MAX_RAW_BYTES: 308000
+  WASM_MAX_GZIP_BYTES: 143000
 
 jobs:
   check:
@@ -69,6 +71,49 @@ jobs:
 
       - name: trunk build --release
         run: trunk build --release
+
+      - name: Check WASM size budget
+        run: |
+          set -euo pipefail
+          wasm_file="$(find dist -maxdepth 1 -type f -name '*_bg.wasm' | head -n 1)"
+          js_file="$(find dist -maxdepth 1 -type f -name '*.js' | head -n 1)"
+
+          if [ -z "${wasm_file}" ]; then
+            echo "No wasm artifact found in dist/"
+            exit 1
+          fi
+
+          wasm_raw_bytes="$(stat -c %s "${wasm_file}")"
+          wasm_gzip_bytes="$(gzip -c "${wasm_file}" | wc -c | tr -d ' ')"
+
+          if [ -n "${js_file}" ]; then
+            js_raw_bytes="$(stat -c %s "${js_file}")"
+            js_gzip_bytes="$(gzip -c "${js_file}" | wc -c | tr -d ' ')"
+          else
+            js_raw_bytes="N/A"
+            js_gzip_bytes="N/A"
+          fi
+
+          {
+            echo "## WASM size report"
+            echo ""
+            echo "| Artifact | Raw bytes | Gzip bytes |"
+            echo "|---|---:|---:|"
+            echo "| ${wasm_file} | ${wasm_raw_bytes} | ${wasm_gzip_bytes} |"
+            echo "| ${js_file:-N/A} | ${js_raw_bytes} | ${js_gzip_bytes} |"
+            echo ""
+            echo "Budget: wasm raw <= ${WASM_MAX_RAW_BYTES}, wasm gzip <= ${WASM_MAX_GZIP_BYTES}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${wasm_raw_bytes}" -gt "${WASM_MAX_RAW_BYTES}" ]; then
+            echo "WASM raw size budget exceeded: ${wasm_raw_bytes} > ${WASM_MAX_RAW_BYTES}"
+            exit 1
+          fi
+
+          if [ "${wasm_gzip_bytes}" -gt "${WASM_MAX_GZIP_BYTES}" ]; then
+            echo "WASM gzip size budget exceeded: ${wasm_gzip_bytes} > ${WASM_MAX_GZIP_BYTES}"
+            exit 1
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v6

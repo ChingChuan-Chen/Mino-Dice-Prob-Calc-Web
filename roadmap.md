@@ -86,7 +86,10 @@ Dice face images are stored in [`assets/dice/`](assets/dice/). File inventory:
 
 ### Phase 5 — Polish & Deployment
 
-- [ ] Optimize WASM binary size (`wasm-opt`, `lto`, `opt-level = "z"`).
+- [x] Optimize WASM binary size (`wasm-opt`, `lto`, `opt-level = "z"`).
+  - Baseline (before optimization tuning): `trunk build --release` produced `dist/*_bg.wasm` = **256,095 bytes** (gzip **117,950 bytes**) and JS glue = **33,485 bytes** (gzip **7,080 bytes**).
+  - Current (after Phase 5 tuning): `dist/*_bg.wasm` = **250,979 bytes** (gzip **116,101 bytes**) and JS glue = **32,492 bytes** (gzip **6,951 bytes**).
+  - CI budget gate added: wasm raw ≤ **308,000 bytes**, wasm gzip ≤ **143,000 bytes**.
 - [ ] Deploy as a static site (GitHub Pages or Cloudflare Pages) — no server required.
 - [x] Write a user-facing README / how-to-use guide.
 
