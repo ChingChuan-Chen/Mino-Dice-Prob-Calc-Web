@@ -9,12 +9,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = [
-  "Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement",
-  "CanvasRenderingContext2d", "console", "Event", "EventTarget",
-  "MouseEvent",
-  "HtmlInputElement", "HtmlSelectElement", "HtmlTableElement",
-  "HtmlTableRowElement", "HtmlTableCellElement", "HtmlTableSectionElement",
-  "Node", "NodeList", "DomTokenList"
+  "Window", "Document", "Element", "HtmlCanvasElement",
+  "console", "Event", "EventTarget", "MouseEvent",
+  "HtmlInputElement", "Node", "DomTokenList"
 ] }
 js-sys = "0.3"
 console_error_panic_hook = { version = "0.1", optional = true }
@@ -32,3 +29,4 @@ default = ["console_error_panic_hook"]
 [profile.release]
 opt-level = "z"
 lto = true
+codegen-units = 1

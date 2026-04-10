@@ -51,6 +51,26 @@ cargo clippy
 cargo fmt --all -- --check
 ```
 
+Release WASM build:
+
+```bash
+trunk build --release
+```
+
+Size snapshot (Phase 5):
+
+- Baseline: wasm `256,095` bytes (gzip `117,950`), JS `33,485` bytes (gzip `7,080`)
+- Current: wasm `250,979` bytes (gzip `116,101`), JS `32,492` bytes (gzip `6,951`)
+- CI budget (enforced): wasm raw `<= 280,000`, wasm gzip `<= 130,000`
+- `index.html` keeps Trunk `wasm-opt` enabled via `<link data-trunk rel="rust" data-wasm-opt="z" />`
+
+Quick local size check:
+
+```bash
+find dist -maxdepth 1 -type f \( -name '*.wasm' -o -name '*.js' \) -print0 \
+  | xargs -0 -I{} sh -c 'printf "%s\traw=%s\tgzip=%s\n" "{}" "$(stat -c %s "{}")" "$(gzip -c "{}" | wc -c)"'
+```
+
 ## SQLite Probability Lookup (Native)
 
 For native runs and tests, you can preload the single-trick probability table into SQLite
@@ -79,4 +99,3 @@ instead of comma-separated die-name strings.
 - [Mino Dice Rules](mino_dice_rule.md)
 - [Probability Model](probability_model.md)
 - [Roadmap](roadmap.md)
-

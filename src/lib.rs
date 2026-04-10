@@ -13,9 +13,10 @@ pub use console_error_panic_hook::set_once as set_panic_hook;
 /// Called by the browser once the WASM module is loaded.
 #[wasm_bindgen(start)]
 pub fn main() {
-    #[cfg(feature = "console_error_panic_hook")]
+    #[cfg(all(feature = "console_error_panic_hook", debug_assertions))]
     console_error_panic_hook::set_once();
 
+    #[cfg(debug_assertions)]
     web_sys::console::log_1(&"Mino Dice Probability Calculator loaded!".into());
 
     if let Err(e) = ui::init_ui() {
