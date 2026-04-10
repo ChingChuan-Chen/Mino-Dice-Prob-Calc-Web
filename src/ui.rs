@@ -3,10 +3,9 @@ use web_sys::{Document, Element, Event, HtmlCanvasElement, HtmlInputElement, Mou
 
 use crate::dice::DieType;
 use crate::round::{
-    Xorshift64, analytical_trick_count_distribution, exact_single_trick_distribution, expected_score_for_bid,
-    expected_tricks,
-    monte_carlo_special_capture_stats, monte_carlo_trick_count_distribution, optimal_bid,
-    round_count, top_opponent_hand_patterns,
+    Xorshift64, analytical_trick_count_distribution, exact_single_trick_distribution,
+    expected_score_for_bid, expected_tricks, monte_carlo_special_capture_stats,
+    monte_carlo_trick_count_distribution, optimal_bid, round_count, top_opponent_hand_patterns,
 };
 
 const DIE_ENTRIES: &[(&str, DieType)] = &[
@@ -270,7 +269,10 @@ fn setup_play_order(doc: &Document) -> Result<(), JsValue> {
 }
 
 fn setup_calc_method(doc: &Document) -> Result<(), JsValue> {
-    for (value, label) in [("dp", "calc-method-btn-dp"), ("monte-carlo", "calc-method-btn-mc")] {
+    for (value, label) in [
+        ("dp", "calc-method-btn-dp"),
+        ("monte-carlo", "calc-method-btn-mc"),
+    ] {
         let el = get_el(doc, label)?;
         let value = value.to_string();
         let cb = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_: Event| {
@@ -295,12 +297,23 @@ fn sync_calc_method_controls(doc: &Document) {
     set_hidden_string(doc, "current-calc-method", method);
 
     if let Some(btn) = doc.get_element_by_id("calc-method-btn-dp") {
-        let _ = btn.set_attribute("class", if method == "dp" { ACTIVE_PC } else { INACTIVE_PC });
+        let _ = btn.set_attribute(
+            "class",
+            if method == "dp" {
+                ACTIVE_PC
+            } else {
+                INACTIVE_PC
+            },
+        );
     }
     if let Some(btn) = doc.get_element_by_id("calc-method-btn-mc") {
         let _ = btn.set_attribute(
             "class",
-            if method == "monte-carlo" { ACTIVE_PC } else { INACTIVE_PC },
+            if method == "monte-carlo" {
+                ACTIVE_PC
+            } else {
+                INACTIVE_PC
+            },
         );
     }
 }
