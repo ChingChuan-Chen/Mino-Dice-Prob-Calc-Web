@@ -5,7 +5,7 @@ use mino_dice_prob_calc::dice::DieType;
 use mino_dice_prob_calc::trick::win_probabilities_for_all_seats_dynamic;
 
 #[cfg(not(target_arch = "wasm32"))]
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 const DIE_BAG_MAX: [u8; 7] = [1, 3, 2, 7, 7, 8, 8];
 
