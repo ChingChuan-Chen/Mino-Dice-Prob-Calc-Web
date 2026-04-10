@@ -3,7 +3,7 @@ use web_sys::{Document, Element, Event, HtmlCanvasElement, HtmlInputElement, Mou
 
 use crate::dice::DieType;
 use crate::round::{
-    Xorshift64, exact_single_trick_distribution, expected_score_for_bid,
+    Xorshift64, analytical_trick_count_distribution, exact_single_trick_distribution, expected_score_for_bid,
     monte_carlo_special_capture_stats, monte_carlo_trick_count_distribution, optimal_bid,
     round_count, top_opponent_hand_patterns,
 };
@@ -30,11 +30,13 @@ pub fn init_ui() -> Result<(), JsValue> {
     setup_tabs(&doc)?;
     setup_player_count(&doc)?;
     setup_play_order(&doc)?;
+    setup_calc_method(&doc)?;
     setup_die_spinners(&doc)?;
     setup_calculate_btn(&doc)?;
     setup_chart_hover(&doc)?;
     setup_resize_handler()?;
     sync_play_order_controls(&doc);
+    sync_calc_method_controls(&doc);
     Ok(())
 }
 
@@ -266,6 +268,50 @@ fn setup_play_order(doc: &Document) -> Result<(), JsValue> {
     Ok(())
 }
 
+fn setup_calc_method(doc: &Document) -> Result<(), JsValue> {
+    for (value, label) in [("dp", "calc-method-btn-dp"), ("monte-carlo", "calc-method-btn-mc")] {
+        let el = get_el(doc, label)?;
+        let value = value.to_string();
+        let cb = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_: Event| {
+            let d = match document() {
+                Ok(d) => d,
+                Err(_) => return,
+            };
+            set_hidden_string(&d, "current-calc-method", &value);
+            sync_calc_method_controls(&d);
+        }));
+        el.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())?;
+        cb.forget();
+    }
+    Ok(())
+}
+
+fn sync_calc_method_controls(doc: &Document) {
+    let method = match get_hidden_string(doc, "current-calc-method").as_str() {
+        "monte-carlo" => "monte-carlo",
+        _ => "dp",
+    };
+    set_hidden_string(doc, "current-calc-method", method);
+
+    if let Some(btn) = doc.get_element_by_id("calc-method-btn-dp") {
+        let _ = btn.set_attribute("class", if method == "dp" { ACTIVE_PC } else { INACTIVE_PC });
+    }
+    if let Some(btn) = doc.get_element_by_id("calc-method-btn-mc") {
+        let _ = btn.set_attribute(
+            "class",
+            if method == "monte-carlo" { ACTIVE_PC } else { INACTIVE_PC },
+        );
+    }
+
+    if let Some(note) = doc.get_element_by_id("calc-method-note") {
+        note.set_text_content(Some(if method == "dp" {
+            "DP uses exact single-trick win probabilities and folds them into a full-hand distribution."
+        } else {
+            "Monte Carlo samples opponent hands and simulates rounds; replications and seed control the estimate."
+        }));
+    }
+}
+
 fn sync_play_order_controls(doc: &Document) {
     let player_count = (get_hidden_i32(doc, "current-player-count") as usize).clamp(3, 6);
     let current = (get_hidden_i32(doc, "current-play-order") as usize).min(player_count - 1);
@@ -423,11 +469,12 @@ fn do_calculate(doc: &Document) -> Result<(), JsValue> {
     let player_count = (get_hidden_i32(doc, "current-player-count") as usize).clamp(3, 6);
     let player_position =
         (get_hidden_i32(doc, "current-play-order") as usize).min(player_count - 1);
+    let calc_method = get_hidden_string(doc, "current-calc-method");
     let replications = get_input_usize(doc, "calc-replications-input").max(1000);
     let hand_size = hand.len();
     let dist = if hand_size == 1 {
         exact_single_trick_distribution(hand[0], player_count, player_position)
-    } else {
+    } else if calc_method == "monte-carlo" {
         let seed =
             get_input_u64(doc, "calc-seed-input").unwrap_or_else(|| js_sys::Date::now() as u64);
         let mut rng = Xorshift64::new(seed);
@@ -438,6 +485,8 @@ fn do_calculate(doc: &Document) -> Result<(), JsValue> {
             replications,
             &mut rng,
         )
+    } else {
+        analytical_trick_count_distribution(&hand, player_count, player_position)
     };
     let special_capture_stats = if hand
         .iter()

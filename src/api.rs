@@ -3,8 +3,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::dice::{DieType, face_distribution};
 use crate::round::{
-    Xorshift64, expected_score_for_bid, expected_tricks, optimal_bid, round_count, simulate_games,
-    simulate_round_number, top_opponent_hand_patterns, trick_count_distribution,
+    Xorshift64, expected_total_score_for_bid, expected_tricks, optimal_bid_with_bonus,
+    round_count, simulate_games, simulate_round_number, top_opponent_hand_patterns,
+    trick_count_distribution,
 };
 
 fn die_type_to_str(dt: DieType) -> &'static str {
@@ -40,6 +41,9 @@ pub struct TrickDistInput {
     pub hand: Vec<String>,
     /// Each opponent's hand (same length as `hand`).
     pub opponent_hands: Vec<Vec<String>>,
+    /// Optional additive expected bonus points term E[B].
+    /// If omitted, defaults to 0.0.
+    pub expected_bonus_points: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -204,9 +208,10 @@ fn inner_trick_distribution(input: TrickDistInput) -> Result<TrickDistOutput, St
     let hand_size = hand.len();
     let dist = trick_count_distribution(&hand, &opp_hands);
     let exp = expected_tricks(&dist);
-    let bid = optimal_bid(&dist);
+    let expected_bonus_points = input.expected_bonus_points.unwrap_or(0.0);
+    let bid = optimal_bid_with_bonus(&dist, expected_bonus_points);
     let scores: Vec<f64> = (0..=hand_size)
-        .map(|b| expected_score_for_bid(b, &dist, hand_size))
+        .map(|b| expected_total_score_for_bid(b, &dist, hand_size, expected_bonus_points))
         .collect();
 
     Ok(TrickDistOutput {

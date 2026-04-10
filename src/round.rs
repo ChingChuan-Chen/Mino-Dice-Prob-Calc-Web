@@ -1,6 +1,6 @@
 use crate::dice::DieType;
 use crate::dice::Face;
-use crate::trick::{RolledDie, trick_winner, win_probability};
+use crate::trick::{RolledDie, trick_winner, win_probabilities_for_all_seats, win_probability};
 
 // ── Round-level simulation ────────────────────────────────────────────────────
 
@@ -86,43 +86,70 @@ pub fn exact_single_trick_distribution(
         "player_position out of range"
     );
 
+    exact_single_trick_distribution_from_remaining(&[player_die], player_die, player_count, player_position)
+}
+
+fn exact_single_trick_distribution_from_remaining(
+    removed_player_dice: &[DieType],
+    player_die: DieType,
+    player_count: usize,
+    player_position: usize,
+) -> Vec<f64> {
+    let winner_dist = exact_single_trick_winner_distribution_from_remaining(
+        removed_player_dice,
+        player_die,
+        player_count,
+        player_position,
+    );
+    let p_win = winner_dist[player_position];
+    vec![1.0 - p_win, p_win]
+}
+
+fn exact_single_trick_winner_distribution_from_remaining(
+    removed_player_dice: &[DieType],
+    player_die: DieType,
+    player_count: usize,
+    player_position: usize,
+) -> Vec<f64> {
     let die_types = DieType::ALL;
     let mut remaining_counts: Vec<usize> = die_types
         .iter()
         .map(|&dt| dt.bag_count() as usize)
         .collect();
-    let player_idx = die_types
-        .iter()
-        .position(|&dt| dt == player_die)
-        .expect("player die must be in DieType::ALL");
-    remaining_counts[player_idx] -= 1;
+    for &removed_die in removed_player_dice {
+        let player_idx = die_types
+            .iter()
+            .position(|&dt| dt == removed_die)
+            .expect("player die must be in DieType::ALL");
+        remaining_counts[player_idx] -= 1;
+    }
 
     let mut opp_dice = Vec::with_capacity(player_count - 1);
-    let mut win_prob = 0.0;
+    let mut winner_probs = vec![0.0f64; player_count];
     let mut state = OpponentDrawState {
         slots_left: player_count - 1,
         die_types: &die_types,
         remaining_counts: &mut remaining_counts,
-        remaining_total: 35,
+        remaining_total: 36 - removed_player_dice.len(),
         draw_prob: 1.0,
     };
-    enumerate_ordered_opponent_draws(
+    enumerate_ordered_opponent_draws_winner_distribution(
         player_die,
         player_position,
         &mut state,
         &mut opp_dice,
-        &mut win_prob,
+        &mut winner_probs,
     );
 
-    vec![1.0 - win_prob, win_prob]
+    winner_probs
 }
 
-fn enumerate_ordered_opponent_draws(
+fn enumerate_ordered_opponent_draws_winner_distribution(
     player_die: DieType,
     player_position: usize,
     state: &mut OpponentDrawState<'_>,
     opp_dice: &mut Vec<DieType>,
-    win_prob: &mut f64,
+    winner_probs: &mut [f64],
 ) {
     if state.slots_left == 0 {
         let mut all_dice = Vec::with_capacity(opp_dice.len() + 1);
@@ -134,7 +161,11 @@ fn enumerate_ordered_opponent_draws(
                 all_dice.push(opp_iter.next().expect("missing opponent die"));
             }
         }
-        *win_prob += state.draw_prob * win_probability(&all_dice, None, player_position);
+
+        let seat_win_probs = win_probabilities_for_all_seats(&all_dice);
+        for seat in 0..winner_probs.len() {
+            winner_probs[seat] += state.draw_prob * seat_win_probs[seat];
+        }
         return;
     }
 
@@ -151,7 +182,13 @@ fn enumerate_ordered_opponent_draws(
         state.slots_left -= 1;
         state.remaining_total -= 1;
         state.draw_prob *= count as f64 / saved_remaining_total as f64;
-        enumerate_ordered_opponent_draws(player_die, player_position, state, opp_dice, win_prob);
+        enumerate_ordered_opponent_draws_winner_distribution(
+            player_die,
+            player_position,
+            state,
+            opp_dice,
+            winner_probs,
+        );
         state.slots_left = saved_slots_left;
         state.remaining_total = saved_remaining_total;
         state.draw_prob = saved_draw_prob;
@@ -166,6 +203,66 @@ struct OpponentDrawState<'a> {
     remaining_counts: &'a mut [usize],
     remaining_total: usize,
     draw_prob: f64,
+}
+
+/// Estimates P(tricks = k) for a specific player hand by Monte Carlo simulation.
+pub fn analytical_trick_count_distribution(
+    player_hand: &[DieType],
+    player_count: usize,
+    player_position: usize,
+) -> Vec<f64> {
+    assert!((3..=6).contains(&player_count), "player_count must be 3–6");
+    assert!(
+        player_position < player_count,
+        "player_position out of range"
+    );
+
+    let hand_size = player_hand.len();
+    if hand_size == 0 {
+        return vec![1.0];
+    }
+
+    // Seat-aware DP: dp[k][s] = probability of having won k tricks and being
+    // in seat s at the start of the next trick.
+    let mut dp = vec![vec![0.0f64; player_count]; hand_size + 1];
+    dp[0][player_position] = 1.0;
+
+    for (trick_idx, &player_die) in player_hand.iter().enumerate() {
+        let mut next = vec![vec![0.0f64; player_count]; hand_size + 1];
+        for wins_so_far in 0..=trick_idx {
+            for seat in 0..player_count {
+                let state_prob = dp[wins_so_far][seat];
+                if state_prob == 0.0 {
+                    continue;
+                }
+
+                let winner_dist = exact_single_trick_winner_distribution_from_remaining(
+                    player_hand,
+                    player_die,
+                    player_count,
+                    seat,
+                );
+
+                for (winner_seat, &winner_prob) in winner_dist.iter().enumerate() {
+                    if winner_prob == 0.0 {
+                        continue;
+                    }
+                    let next_seat = (seat + player_count - winner_seat) % player_count;
+                    let next_wins = if winner_seat == seat {
+                        wins_so_far + 1
+                    } else {
+                        wins_so_far
+                    };
+                    next[next_wins][next_seat] += state_prob * winner_prob;
+                }
+            }
+        }
+        dp = next;
+    }
+
+    (0..=hand_size)
+        .map(|wins| dp[wins].iter().sum())
+        .collect()
 }
 
 /// Estimates P(tricks = k) for a specific player hand by Monte Carlo simulation.
@@ -303,6 +400,20 @@ pub fn expected_score_for_bid(bid: usize, dist: &[f64], hand_size: usize) -> f64
     }
 }
 
+/// Computes expected total score by adding expected bonus points to the base
+/// expected score.
+///
+/// This matches the full round scoring rule:
+///   E[score | b] = E[base_score | b] + E[bonus_points]
+pub fn expected_total_score_for_bid(
+    bid: usize,
+    dist: &[f64],
+    hand_size: usize,
+    expected_bonus_points: f64,
+) -> f64 {
+    expected_score_for_bid(bid, dist, hand_size) + expected_bonus_points
+}
+
 /// Returns the bid (0..=hand_size) that maximises expected score.
 pub fn optimal_bid(dist: &[f64]) -> usize {
     let hand_size = dist.len() - 1;
@@ -310,6 +421,26 @@ pub fn optimal_bid(dist: &[f64]) -> usize {
         .max_by(|&a, &b| {
             expected_score_for_bid(a, dist, hand_size)
                 .partial_cmp(&expected_score_for_bid(b, dist, hand_size))
+                .unwrap()
+        })
+        .unwrap()
+}
+
+/// Returns the bid (0..=hand_size) that maximises expected total score.
+///
+/// Because bonus is an additive term independent of bid in this model, this is
+/// equivalent to `optimal_bid` and provided for scoring-rule completeness.
+pub fn optimal_bid_with_bonus(dist: &[f64], expected_bonus_points: f64) -> usize {
+    let hand_size = dist.len() - 1;
+    (0..=hand_size)
+        .max_by(|&a, &b| {
+            expected_total_score_for_bid(a, dist, hand_size, expected_bonus_points)
+                .partial_cmp(&expected_total_score_for_bid(
+                    b,
+                    dist,
+                    hand_size,
+                    expected_bonus_points,
+                ))
                 .unwrap()
         })
         .unwrap()
@@ -742,7 +873,7 @@ fn simulate_round(
 
         for order in 1..player_count {
             let p = (leader + order) % player_count;
-            let chosen_die_idx = choose_die_to_play(led_color, &rolls, &remaining[p], &hands[p]);
+            let chosen_die_idx = choose_die_to_play(led_color, &remaining[p], &hands[p], rng);
             let chosen_die = hands[p][chosen_die_idx];
             // Remove from remaining.
             if let Some(pos) = remaining[p].iter().position(|&i| i == chosen_die_idx) {
@@ -776,40 +907,16 @@ fn simulate_round(
 /// - any die matching the led color,
 /// - or any die if the player has neither.
 ///
-/// The simulator remains deterministic and chooses the first legal die by hand order.
+/// If multiple legal choices exist, sample uniformly at random.
 fn choose_die_to_play(
     led_color: Option<DieType>,
-    current_rolls: &[RolledDie],
     remaining_indices: &[usize],
     hand: &[DieType],
+    rng: &mut impl Rng,
 ) -> usize {
     let legal_indices = legal_die_choices(led_color, remaining_indices, hand);
-    let mut losing_choices = Vec::new();
-    for idx in legal_indices.iter().copied() {
-        let win_prob = die_win_probability_against_current_rolls(hand[idx], current_rolls);
-        if win_prob < 1.0 - 1e-12 {
-            losing_choices.push(idx);
-        }
-    }
-
-    let candidates = if losing_choices.is_empty() {
-        legal_indices
-    } else {
-        losing_choices
-    };
-
-    candidates
-        .into_iter()
-        .min_by(|&left, &right| {
-            let left_prob = die_win_probability_against_current_rolls(hand[left], current_rolls);
-            let right_prob = die_win_probability_against_current_rolls(hand[right], current_rolls);
-            left_prob
-                .partial_cmp(&right_prob)
-                .unwrap()
-                .then_with(|| die_strength_key(hand[left]).cmp(&die_strength_key(hand[right])))
-                .then_with(|| left.cmp(&right))
-        })
-        .expect("at least one legal die choice is required")
+    let idx = rng.next_usize(legal_indices.len());
+    legal_indices[idx]
 }
 
 fn legal_die_choices(
@@ -837,35 +944,6 @@ fn legal_die_choices(
         }
     }
     remaining_indices.to_vec()
-}
-
-fn die_win_probability_against_current_rolls(die: DieType, current_rolls: &[RolledDie]) -> f64 {
-    let faces = merged_die_faces(die);
-    faces
-        .into_iter()
-        .filter_map(|(face, prob)| {
-            let mut rolls = current_rolls.to_vec();
-            rolls.push(RolledDie::new(die, face, current_rolls.len()));
-            let winner = trick_winner(&rolls);
-            if winner == current_rolls.len() {
-                Some(prob)
-            } else {
-                None
-            }
-        })
-        .sum()
-}
-
-fn die_strength_key(die: DieType) -> (u8, u8) {
-    match die {
-        DieType::Gray => (0, 0),
-        DieType::Purple => (1, 0),
-        DieType::Yellow => (2, 0),
-        DieType::Red => (3, 0),
-        DieType::Mermaid => (4, 0),
-        DieType::Griffin => (5, 0),
-        DieType::Minotaur => (6, 0),
-    }
 }
 
 fn embed_player_hand(
@@ -917,24 +995,6 @@ fn trick_bonus_points(rolls: &[RolledDie], winner_roll_idx: usize) -> TrickBonus
 fn random_face(die: DieType, rng: &mut impl Rng) -> Face {
     let faces = die.faces();
     faces[rng.next_usize(faces.len())]
-}
-
-fn merged_die_faces(die: DieType) -> Vec<(Face, f64)> {
-    let faces = die.faces();
-    let prob = 1.0 / faces.len() as f64;
-    let mut map: std::collections::HashMap<Face, f64> = std::collections::HashMap::new();
-    for face in faces {
-        *map.entry(face).or_insert(0.0) += prob;
-    }
-    let mut merged: Vec<(Face, f64)> = map.into_iter().collect();
-    merged.sort_by_key(|(face, _)| match face {
-        Face::Flag => 0,
-        Face::Number(value) => *value as u16,
-        Face::Mermaid => 100,
-        Face::Griffin => 101,
-        Face::Minotaur => 102,
-    });
-    merged
 }
 
 /// Compute score for one player in one round, including special-capture bonuses.
@@ -1022,6 +1082,57 @@ mod tests {
     }
 
     #[test]
+    fn analytical_trick_count_distribution_has_valid_shape() {
+        let hand = vec![DieType::Red, DieType::Yellow, DieType::Gray];
+        let dist = analytical_trick_count_distribution(&hand, 4, 0);
+        assert_eq!(dist.len(), hand.len() + 1);
+        assert!((dist.iter().sum::<f64>() - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn analytical_single_die_matches_exact_distribution() {
+        let exact = exact_single_trick_distribution(DieType::Mermaid, 4, 2);
+        let analytical = analytical_trick_count_distribution(&[DieType::Mermaid], 4, 2);
+        assert_eq!(analytical.len(), exact.len());
+        for (left, right) in analytical.iter().zip(exact.iter()) {
+            assert!((left - right).abs() < 1e-12, "analytical={analytical:?}, exact={exact:?}");
+        }
+    }
+
+    #[test]
+    fn analytical_distribution_changes_with_play_order() {
+        let hand = vec![DieType::Gray, DieType::Gray, DieType::Gray];
+        let lead_dist = analytical_trick_count_distribution(&hand, 3, 0);
+        let last_dist = analytical_trick_count_distribution(&hand, 3, 2);
+        assert_ne!(lead_dist, last_dist);
+    }
+
+    #[test]
+    fn full_hand_conditioning_changes_analytical_distribution() {
+        let hand = vec![DieType::Mermaid, DieType::Red, DieType::Gray];
+        let improved = analytical_trick_count_distribution(&hand, 3, 0);
+
+        let mut legacy_dp = vec![0.0f64; hand.len() + 1];
+        legacy_dp[0] = 1.0;
+        for (trick_idx, &player_die) in hand.iter().enumerate() {
+            let p_win = exact_single_trick_distribution(player_die, 3, 0)[1];
+            let mut next = vec![0.0f64; hand.len() + 1];
+            for wins_so_far in 0..=trick_idx {
+                next[wins_so_far] += legacy_dp[wins_so_far] * (1.0 - p_win);
+                next[wins_so_far + 1] += legacy_dp[wins_so_far] * p_win;
+            }
+            legacy_dp = next;
+        }
+
+        let max_delta = improved
+            .iter()
+            .zip(legacy_dp.iter())
+            .map(|(left, right)| (left - right).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(max_delta > 1e-6, "improved={improved:?}, legacy={legacy_dp:?}");
+    }
+
+    #[test]
     fn exact_single_trick_distribution_mermaid_three_players() {
         let dist = exact_single_trick_distribution(DieType::Mermaid, 3, 0);
         assert_eq!(dist.len(), 2);
@@ -1071,6 +1182,22 @@ mod tests {
     }
 
     #[test]
+    fn expected_total_score_adds_bonus_term() {
+        let dist = vec![0.25, 0.5, 0.25];
+        let base = expected_score_for_bid(1, &dist, 2);
+        let total = expected_total_score_for_bid(1, &dist, 2, 12.5);
+        assert!((total - (base + 12.5)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn optimal_bid_with_bonus_matches_optimal_bid() {
+        let dist = vec![0.2, 0.6, 0.2];
+        let base_opt = optimal_bid(&dist);
+        let total_opt = optimal_bid_with_bonus(&dist, 17.0);
+        assert_eq!(base_opt, total_opt);
+    }
+
+    #[test]
     fn score_includes_bonus_points() {
         assert_eq!(score_player(1, 1, 3, 50), 70);
     }
@@ -1079,20 +1206,31 @@ mod tests {
     fn choose_die_allows_special_even_with_matching_color() {
         let hand = vec![DieType::Red, DieType::Mermaid, DieType::Yellow];
         let remaining = vec![0usize, 1, 2];
-        let current_rolls = vec![RolledDie::new(DieType::Red, Face::Number(5), 0)];
-        let chosen = choose_die_to_play(Some(DieType::Red), &current_rolls, &remaining, &hand);
-        assert_eq!(chosen, 1);
-        assert_eq!(hand[chosen], DieType::Mermaid);
+        let mut rng = Xorshift64::new(1);
+        let mut saw_matching = false;
+        let mut saw_special = false;
+        for _ in 0..200 {
+            let chosen = choose_die_to_play(Some(DieType::Red), &remaining, &hand, &mut rng);
+            if hand[chosen] == DieType::Red {
+                saw_matching = true;
+            }
+            if hand[chosen] == DieType::Mermaid {
+                saw_special = true;
+            }
+            assert!(hand[chosen] == DieType::Red || hand[chosen] == DieType::Mermaid);
+        }
+        assert!(saw_matching && saw_special, "both matching and special choices should be sampled");
     }
 
     #[test]
-    fn choose_die_prefers_weaker_losing_option() {
-        let hand = vec![DieType::Minotaur, DieType::Gray, DieType::Red];
+    fn choose_die_without_matching_uses_any_remaining_choice() {
+        let hand = vec![DieType::Minotaur, DieType::Gray, DieType::Red, DieType::Yellow];
         let remaining = vec![0usize, 1, 2];
-        let current_rolls = vec![RolledDie::new(DieType::Yellow, Face::Number(5), 0)];
-        let chosen = choose_die_to_play(Some(DieType::Yellow), &current_rolls, &remaining, &hand);
-        assert_eq!(chosen, 1);
-        assert_eq!(hand[chosen], DieType::Gray);
+        let mut rng = Xorshift64::new(7);
+        for _ in 0..50 {
+            let chosen = choose_die_to_play(Some(DieType::Yellow), &remaining, &hand, &mut rng);
+            assert!(remaining.contains(&chosen));
+        }
     }
 
     #[test]

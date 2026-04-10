@@ -12,6 +12,7 @@
   <div class="hidden" aria-hidden="true">
     <input type="hidden" id="current-player-count" value="4" />
     <input type="hidden" id="current-play-order" value="0" />
+    <input type="hidden" id="current-calc-method" value="dp" />
     <input type="hidden" id="current-hand-size" value="0" />
     <input type="hidden" id="last-dist" value="" />
     <input type="hidden" id="last-optimal-bid" value="0" />
@@ -32,7 +33,6 @@
       <button id="tab-btn-calculator" class="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 text-slate-950">Calculator</button>
     </nav>
 
-    <section id="tab-panel-calculator" class="space-y-5">
       <section class="bg-slate-800 rounded-2xl p-5 shadow">
         <h2 class="text-base font-semibold mb-4 text-slate-200">Hand Setup</h2>
 
@@ -58,6 +58,30 @@
           </div>
           <div class="mt-1 text-xs text-slate-500">1st means you lead now; later positions mean that many players act before you.</div>
         </div>
+
+        <details class="mb-5 rounded-xl border border-slate-700 bg-slate-900/40">
+          <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-200 select-none">
+            Calculation Options
+          </summary>
+          <div class="border-t border-slate-700 px-4 py-4">
+            <p class="text-xs text-slate-400 uppercase tracking-wide mb-2">Probability calculation method</p>
+            <div class="flex flex-wrap gap-2 mb-2">
+              <button id="calc-method-btn-dp" type="button" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white">DP</button>
+              <button id="calc-method-btn-mc" type="button" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">Monte Carlo</button>
+            </div>
+            <p id="calc-method-note" class="text-xs text-slate-500 mb-4">DP uses exact single-trick win probabilities and folds them into a full-hand distribution.</p>
+
+            <label class="block text-sm text-slate-300 mb-4">Monte Carlo Replications (Max 100,000)
+              <input id="calc-replications-input" type="number" min="1000" step="1000" value="10000" class="mt-2 w-full bg-slate-700 rounded-lg px-3 py-2 text-center" />
+              <div class="mt-1 text-xs text-slate-500">Used for Monte Carlo probability estimates and special-capture odds.</div>
+            </label>
+
+            <label class="block text-sm text-slate-300">Monte Carlo Seed
+              <input id="calc-seed-input" type="number" min="1" placeholder="blank = random each click" class="mt-2 w-full bg-slate-700 rounded-lg px-3 py-2 text-center" />
+              <div class="mt-1 text-xs text-slate-500">Only used when Monte Carlo sampling is needed.</div>
+            </label>
+          </div>
+        </details>
 
         <div class="mb-5">
           <p class="text-xs text-slate-400 uppercase tracking-wide mb-2">Your hand</p>
@@ -135,16 +159,6 @@
           </div>
           <p class="text-xs text-slate-500 mt-2">Hand size: <span id="hand-size-display" class="font-semibold text-slate-300">0 / 8</span></p>
         </div>
-
-        <label class="block text-sm text-slate-300 mb-5">Monte Carlo Replications (Max 100,000)
-          <input id="calc-replications-input" type="number" min="1000" step="1000" value="10000" class="mt-2 w-full bg-slate-700 rounded-lg px-3 py-2 text-center" />
-          <div class="mt-1 text-xs text-slate-500">Used for the probability estimate of your current hand.</div>
-        </label>
-
-        <label class="block text-sm text-slate-300 mb-5">Monte Carlo Seed
-          <input id="calc-seed-input" type="number" min="1" placeholder="blank = random each click" class="mt-2 w-full bg-slate-700 rounded-lg px-3 py-2 text-center" />
-          <div class="mt-1 text-xs text-slate-500">Only used when hand size is greater than 1.</div>
-        </label>
 
         <button id="calc-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl font-semibold transition-colors">
           Calculate Distribution
