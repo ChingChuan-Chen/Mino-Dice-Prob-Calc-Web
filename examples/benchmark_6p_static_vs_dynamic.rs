@@ -2,10 +2,9 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use mino_dice_prob_calc::dice::DieType;
-use mino_dice_prob_calc::round::{sample_hand, Xorshift64};
+use mino_dice_prob_calc::round::{Xorshift64, sample_hand};
 use mino_dice_prob_calc::trick::{
-    win_probabilities_for_all_seats,
-    win_probabilities_for_all_seats_dynamic,
+    win_probabilities_for_all_seats, win_probabilities_for_all_seats_dynamic,
 };
 
 const PLAYER_COUNT: usize = 6;
