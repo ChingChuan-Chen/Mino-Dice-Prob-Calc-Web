@@ -2,6 +2,8 @@ use crate::dice::DieType;
 use crate::dice::Face;
 use crate::trick::{RolledDie, trick_winner, win_probabilities_for_all_seats, win_probability};
 
+const FLOAT_EPSILON: f64 = 1e-12;
+
 // ── Round-level simulation ────────────────────────────────────────────────────
 
 /// The number of rounds played for a given player count.
@@ -129,7 +131,7 @@ fn exact_single_trick_winner_distribution_from_remaining(
         remaining_counts[player_idx] -= 1;
     }
 
-    let mut opp_dice = Vec::with_capacity(player_count - 1);
+    let mut opponent_dice = Vec::with_capacity(player_count - 1);
     let mut winner_probs = vec![0.0f64; player_count];
     let mut state = OpponentDrawState {
         slots_left: player_count - 1,
@@ -142,7 +144,7 @@ fn exact_single_trick_winner_distribution_from_remaining(
         player_die,
         player_position,
         &mut state,
-        &mut opp_dice,
+        &mut opponent_dice,
         &mut winner_probs,
     );
 
@@ -153,13 +155,13 @@ fn enumerate_ordered_opponent_draws_winner_distribution(
     player_die: DieType,
     player_position: usize,
     state: &mut OpponentDrawState<'_>,
-    opp_dice: &mut Vec<DieType>,
+    opponent_dice: &mut Vec<DieType>,
     winner_probs: &mut [f64],
 ) {
     if state.slots_left == 0 {
-        let mut all_dice = Vec::with_capacity(opp_dice.len() + 1);
-        let mut opp_iter = opp_dice.iter().copied();
-        for seat in 0..(opp_dice.len() + 1) {
+        let mut all_dice = Vec::with_capacity(opponent_dice.len() + 1);
+        let mut opp_iter = opponent_dice.iter().copied();
+        for seat in 0..(opponent_dice.len() + 1) {
             if seat == player_position {
                 all_dice.push(player_die);
             } else {
@@ -180,7 +182,7 @@ fn enumerate_ordered_opponent_draws_winner_distribution(
             continue;
         }
         state.remaining_counts[idx] -= 1;
-        opp_dice.push(die_type);
+        opponent_dice.push(die_type);
         let saved_slots_left = state.slots_left;
         let saved_remaining_total = state.remaining_total;
         let saved_draw_prob = state.draw_prob;
@@ -191,13 +193,13 @@ fn enumerate_ordered_opponent_draws_winner_distribution(
             player_die,
             player_position,
             state,
-            opp_dice,
+            opponent_dice,
             winner_probs,
         );
         state.slots_left = saved_slots_left;
         state.remaining_total = saved_remaining_total;
         state.draw_prob = saved_draw_prob;
-        opp_dice.pop();
+        opponent_dice.pop();
         state.remaining_counts[idx] += 1;
     }
 }
@@ -284,6 +286,11 @@ pub fn analytical_trick_count_distribution(
 
                     for t in 0..DieType::ALL.len() {
                         let expected_draw = transition.winner_expected_draw_counts[winner_seat][t];
+                        debug_assert!(
+                            expected_draw <= state_remaining[t] + 1e-6,
+                            "expected draw exceeds remaining count: expected_draw={expected_draw}, remaining={}",
+                            state_remaining[t]
+                        );
                         let remaining_after = (state_remaining[t] - expected_draw).max(0.0);
                         next_remaining_sum[next_wins][next_seat][t] +=
                             transition_prob * remaining_after;
@@ -367,7 +374,7 @@ fn enumerate_bag_aware_opponent_draws(
     remaining_counts: Vec<f64>,
     slots_left: usize,
     draw_prob: f64,
-    opp_dice: &mut Vec<DieType>,
+    opponent_dice: &mut Vec<DieType>,
     draw_counts: &mut [usize],
     player_die: DieType,
     player_position: usize,
@@ -375,9 +382,9 @@ fn enumerate_bag_aware_opponent_draws(
     winner_draw_weighted_sum: &mut [Vec<f64>],
 ) {
     if slots_left == 0 {
-        let mut all_dice = Vec::with_capacity(opp_dice.len() + 1);
-        let mut opp_iter = opp_dice.iter().copied();
-        for seat in 0..(opp_dice.len() + 1) {
+        let mut all_dice = Vec::with_capacity(opponent_dice.len() + 1);
+        let mut opp_iter = opponent_dice.iter().copied();
+        for seat in 0..(opponent_dice.len() + 1) {
             if seat == player_position {
                 all_dice.push(player_die);
             } else {
@@ -404,7 +411,7 @@ fn enumerate_bag_aware_opponent_draws(
 
     for (die_idx, &die_type) in DieType::ALL.iter().enumerate() {
         let count = remaining_counts[die_idx];
-        if count <= 1e-12 {
+        if count <= FLOAT_EPSILON {
             continue;
         }
 
@@ -412,13 +419,13 @@ fn enumerate_bag_aware_opponent_draws(
         next_counts[die_idx] = (next_counts[die_idx] - 1.0).max(0.0);
         let next_draw_prob = draw_prob * (count / remaining_total);
 
-        opp_dice.push(die_type);
+        opponent_dice.push(die_type);
         draw_counts[die_idx] += 1;
         enumerate_bag_aware_opponent_draws(
             next_counts,
             slots_left - 1,
             next_draw_prob,
-            opp_dice,
+            opponent_dice,
             draw_counts,
             player_die,
             player_position,
@@ -426,7 +433,7 @@ fn enumerate_bag_aware_opponent_draws(
             winner_draw_weighted_sum,
         );
         draw_counts[die_idx] -= 1;
-        opp_dice.pop();
+        opponent_dice.pop();
     }
 }
 
@@ -1348,7 +1355,7 @@ mod tests {
     }
 
     #[test]
-    fn bag_aware_dp_changes_distribution_from_legacy_inter_trick_dp() {
+    fn test_bag_aware_dp_differs_from_legacy_inter_trick_dp() {
         let hand = vec![DieType::Mermaid, DieType::Red, DieType::Gray];
         let player_count = 4;
         let player_position = 0;
