@@ -48,20 +48,32 @@ Winner rules:
 
 At most 6 players and at most 3 merged outcomes per die gives at most $3^6=729$ outcome tuples per trick.
 
-## 4. Full-Hand Distribution Model
+## 4. Full-Hand Distribution Model (Bag-Aware DP)
 
-For hand size $h$, define DP state by wins and current seat:
+For hand size $h$, DP state tracks both wins/seat probability and expected remaining opponent bag composition.
+
+Seat-state probability:
 
 $$
 \mathrm{dp}_j[k,s]=P(\text{after } j \text{ tricks: wins}=k,\text{ seat}=s)
 $$
 
-For trick $j$, given current seat $s$, let $q_j(w\mid s)$ be probability winner is seat $w$.
-
-Transition:
+Per-state expected remaining opponent bag (die-type index $t$):
 
 $$
-\mathrm{dp}_{j+1}[k',s'] += \mathrm{dp}_j[k,s]\cdot q_j(w\mid s)
+\mathrm{rem}_j[k,s,t]=E[\text{remaining count of die type }t\mid j,k,s]
+$$
+
+For trick $j$, winner probabilities are conditioned on current seat and remaining bag estimate:
+
+$$
+q_j(w\mid s,\mathrm{rem}_j[k,s,\cdot])
+$$
+
+State transition:
+
+$$
+\mathrm{dp}_{j+1}[k',s'] += \mathrm{dp}_j[k,s]\cdot q_j(w\mid s,\mathrm{rem}_j[k,s,\cdot])
 $$
 
 where
@@ -70,18 +82,22 @@ $$
 s'=(s-w)\bmod n,\qquad k'=k+\mathbf{1}[w=s]
 $$
 
+For each winner outcome, the expected opponent draw composition is removed from the state bag expectation before accumulating into $\mathrm{rem}_{j+1}$.
+
 Final trick-count distribution:
 
 $$
 P(K=k)=\sum_s \mathrm{dp}_h[k,s]
 $$
 
+For $h=1$, code uses the existing exact single-trick path.
+
 ## 5. Score Model
 
 Let $K$ be tricks won and $B$ bonus points.
 
 $$
-	ext{base}(b,k)=
+\text{base}(b,k)=
 \begin{cases}
 +10h & b=0,\ k=0 \\
 -10h & b=0,\ k>0 \\
@@ -118,9 +134,9 @@ Storage format:
 
 This compact integer key replaces long string keys and improves storage/index efficiency.
 
-### 6.3 Seat-Aware DP Variant
+### 6.3 Bag-Aware DP Variant
 
-Implemented in `src/round.rs` using the model above.
+Implemented in `src/round.rs` using the bag-aware model above.
 It is fast and stable for interactive UI use.
 
 ### 6.4 Monte Carlo Variant
@@ -138,18 +154,16 @@ Die-choice policy in simulation:
 2. If no matching color exists, all remaining dice are legal.
 3. If multiple legal choices exist, choose uniformly among legal choices.
 
-## 7. Why DP and Monte Carlo Differ
+## 7. Why Bag-Aware DP and Monte Carlo Still Differ
 
-DP still approximates full trajectories. Main reasons for gap include:
+Bag-aware DP reduces the previous inter-trick independence approximation, but it still compresses trajectory detail. Main reasons for residual gaps include:
 
-1. Opponent modeling is marginal at trick level. DP uses winner probabilities per trick state, while Monte Carlo samples concrete opponent hands and keeps those hands fixed through the round.
-2. State compression loses information. DP state tracks only wins and seat; it does not track each player's remaining dice multiset, which strongly affects later legal moves and win odds.
-3. Inter-trick dependence is only partially represented. In Monte Carlo, an early trick result changes both leader and future legal choices through explicit hand depletion; DP approximates this through reduced transitions.
-4. Policy realism differs. Monte Carlo applies explicit legal-play policy (follow-suit plus optional special), while DP uses aggregated winner probabilities and does not model micro-level choice paths directly.
-5. Nonlinear bonus events are path dependent. Special-capture bonuses depend on specific face combinations and trick outcomes; DP trick-count distribution alone does not encode those event paths.
-6. Opponent-opponent interactions are explicit only in Monte Carlo. DP focuses on the target player's compressed process, while Monte Carlo simulates full table interaction every trick.
-7. Finite-sample noise exists in Monte Carlo outputs. Even with 100000 replications, small probability cells can fluctuate and create small apparent gaps.
-8. Numerical/rounding presentation can amplify visible differences. Reporting percentages to two decimals and expectations to four decimals can make tiny differences look larger than their practical impact.
+1. DP tracks expected remaining opponent bag composition per state, not the full joint distribution of every opponent hand.
+2. DP transitions are aggregated by winner outcomes, while Monte Carlo simulates concrete legal-play choices and exact per-player depletion paths.
+3. Nonlinear bonus events are path dependent. Special-capture bonuses depend on exact face/trick histories not fully represented in compressed DP state.
+4. Opponent-opponent interactions are explicit in Monte Carlo every trick, but only represented through aggregated transitions in DP.
+5. Finite-sample noise exists in Monte Carlo outputs. Even with 100000 replications, small probability cells can fluctuate.
+6. Numerical/rounding presentation can amplify visible differences.
 
 So DP is the fast estimator; Monte Carlo is the higher-fidelity behavioral simulator.
 
